@@ -9,7 +9,7 @@ st.set_page_config(
     page_title="Mahesh Personal Assistant", page_icon="📂", layout="wide"
 )
 
-# डेटाबेस कनेक्शन सेट अप (ताकि डेटा कभी डिलीट न हो)
+# डेटाबेस कनेक्शन सेट अप
 DB_FILE = "mahesh_work_assistant.db"
 
 
@@ -17,7 +17,8 @@ def init_db():
   conn = sqlite3.connect(DB_FILE)
   c = conn.cursor()
 
-  # 1. प्राप्त आवेदन टेबल
+  # यदि पुरानी टेबल्स में नए कॉलम (जैसे mobile, reply आदि) नहीं हैं, तो उन्हें रीक्रिएट करने के लिए ड्रॉप कर दें या सेफ बनाएं
+  # हम सुनिश्चित करते हैं कि सभी कॉलम सही से आएं
   c.execute("""
         CREATE TABLE IF NOT EXISTS received_apps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +32,6 @@ def init_db():
         )
     """)
 
-  # 2. जमा प्रतिवेदन टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS submitted_reports (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +44,7 @@ def init_db():
         )
     """)
 
-  # 3. सीएम हेल्पलाइन टेबल
+  # सीएम हेल्पलाइन टेबल (सुरक्षित कॉलम के साथ)
   c.execute("""
         CREATE TABLE IF NOT EXISTS cm_helpline (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,14 +59,16 @@ def init_db():
             remarks TEXT
         )
     """)
-
-  # यदि पुराना डेटाबेस है और mobile कॉलम नहीं है, तो उसे सुरक्षित रूप से जोड़ें (Migration)
+  # एक्स्ट्रा सेफ्टी के लिए ALTER TABLE
   try:
     c.execute("ALTER TABLE cm_helpline ADD COLUMN mobile TEXT")
   except:
     pass
+  try:
+    c.execute("ALTER TABLE cm_helpline ADD COLUMN reply TEXT")
+  except:
+    pass
 
-  # 4. अमल आदेश टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS execution_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,7 +85,6 @@ def init_db():
         )
     """)
 
-  # 5. किसान डेटाबेस टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS farmers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +96,6 @@ def init_db():
         )
     """)
 
-  # 6. दस्तावेज़ फोल्डर टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,7 +107,6 @@ def init_db():
         )
     """)
 
-  # 7. निजी डायरी टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS diary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,7 +173,6 @@ with tab1:
 
   conn = sqlite3.connect(DB_FILE)
 
-  # डैशबोर्ड / काउंटर
   df_rec_count = pd.read_sql("SELECT COUNT(*) as cnt FROM received_apps", conn)
   df_sub_count = pd.read_sql(
       "SELECT COUNT(*) as cnt FROM submitted_reports", conn
@@ -652,11 +650,8 @@ with tab3:
               "SELECT id FROM cm_helpline WHERE comp_id = ?", (comp_id.strip(),)
           )
           if cursor.fetchone():
-            st.error(
-                f"त्रुटि: शिकायत क्रमांक '{comp_id}' पहले से दर्ज है!"
-            )
+            st.error(f"त्रुटि: शिकायत क्रमांक '{comp_id}' पहले से दर्ज है!")
           else:
-            # सुरक्षित रूप से mobile कॉलम के साथ डेटा इन्सर्ट करें
             cursor.execute(
                 """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -688,8 +683,17 @@ with tab3:
         except:
           days_pending = 0
 
-        # सुरक्षित रूप से मोबाइल नंबर चेक करना ताकि KeyError न आए
-        mob_display = row["mobile"] if "mobile" in row and pd.notna(row["mobile"]) else "उपलब्ध नहीं"
+        # सुरक्षित रूप से कॉलम चेक करना
+        mob_display = (
+            row["mobile"]
+            if "mobile" in df_active.columns and pd.notna(row["mobile"])
+            else "उपलब्ध नहीं"
+        )
+        rep_display = (
+            row["reply"]
+            if "reply" in df_active.columns and pd.notna(row["reply"])
+            else ""
+        )
 
         with st.expander(
             f"[{serial_no}] 🆔 {row['comp_id']} | स्तर: {row['level']} | प्रेषक:"
@@ -699,7 +703,9 @@ with tab3:
           st.write(f"**विषय:** {row['subject']}")
           st.write(f"**प्राप्ति दिनांक:** {row['date']}")
           st.write(f"**वर्तमान स्थिति:** {row['status']}")
-          st.write(f"**दर्ज जवाब:** {row['reply'] if row['reply'] else 'अभी जवाब नहीं डला है'}")
+          st.write(
+              f"**दर्ज जवाब:** {rep_display if rep_display else 'अभी जवाब नहीं डला है'}"
+          )
           st.write(f"**अन्य टिप्पणी:** {row['remarks']}")
 
           st.markdown("---")
@@ -716,7 +722,8 @@ with tab3:
                 else 0,
             )
             up_reply = st.text_area(
-                "यहाँ जवाब / कार्रवाई दर्ज करें", value=row["reply"] if row["reply"] else ""
+                "यहाँ जवाब / कार्रवाई दर्ज करें",
+                value=rep_display,
             )
             up_btn = st.form_submit_button("अपडेट सुरक्षित करें")
 
@@ -744,14 +751,23 @@ with tab3:
     if not df_closed.empty:
       for idx, row in df_closed.iterrows():
         serial_no = idx + 1
-        mob_display = row["mobile"] if "mobile" in row and pd.notna(row["mobile"]) else "उपलब्ध नहीं"
+        mob_display = (
+            row["mobile"]
+            if "mobile" in df_closed.columns and pd.notna(row["mobile"])
+            else "उपलब्ध नहीं"
+        )
+        rep_display = (
+            row["reply"]
+            if "reply" in df_closed.columns and pd.notna(row["reply"])
+            else ""
+        )
         with st.expander(
             f"[{serial_no}] 🆔 {row['comp_id']} | प्रेषक: {row['complainant']}"
             f" | विषय: {row['subject']}"
         ):
           st.write(f"**मोबाइल नंबर:** {mob_display}")
           st.write(f"**स्तर:** {row['level']} | **दिनांक:** {row['date']}")
-          st.write(f"**अंतिम जवाब/कारण:** {row['reply']}")
+          st.write(f"**अंतिम जवाब/कारण:** {rep_display}")
           if st.button(
               "🗑️ बंद शिकायत को डिलीट करें", key=f"del_closed_{row['id']}"
           ):

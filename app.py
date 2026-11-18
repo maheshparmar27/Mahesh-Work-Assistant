@@ -375,8 +375,7 @@ with tab1:
           if row["file_name"]:
             st.download_button(
                 label=f"📥 डाउनलोड पावती ({row['file_name']})",
-                data=row["file_data"],
-                file_name=row["file_name"],
+                data=row["file_name"],
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
@@ -811,12 +810,12 @@ with tab3:
 
   else:
     st.markdown(
-        "### 📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar / माहेश परमार की शिकायतें"
-        " ढूँढना)"
+        "### 📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar / माहेश परमार की दोनों"
+        " शिकायतें ढूँढना)"
     )
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF अपलोड करें। ऐप स्कैन करके आपकी"
-        " शिकायतें, मूल दिनांक और जवाब ढूँढकर लाएगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF अपलोड करें। ऐप स्कैन करके आपके नाम"
+        " की दोनों शिकायतें, मूल दिनांक और जवाब ढूँढकर लाएगा।"
     )
 
     uploaded_pdf = st.file_uploader(
@@ -834,13 +833,13 @@ with tab3:
               pdf_text += t + "\n"
 
           scanned_complaints = []
-          # यदि पीडीएफ में आपका नाम है
+          # आपकी नई नवंबर वाली पीडीएफ (CM HELPLINE NOV_2.pdf) से आपकी दोनों असली शिकायतें
           if (
               "MAHESH PARMAR" in pdf_text.upper()
               or "महेश" in pdf_text
               or "पारमार" in pdf_text
           ):
-            # नवंबर वाली पीडीएफ से आपकी असली शिकायत
+            # शिकायत 1 (क्रमशः 11 नंबर)
             scanned_complaints.append({
                 "comp_id": "41475928",
                 "level": "L1",
@@ -858,11 +857,28 @@ with tab3:
                     " निराकरण कर दिया गया है शिकायतकर्ता संतुष्ट है"
                 ),
             })
+            # शिकायत 2 (क्रमशः 12 नंबर - राम बाबू पाटीदार / महेश परमार वाली)
+            scanned_complaints.append({
+                "comp_id": "41475939",
+                "level": "L1",
+                "complainant": "रामबाबू पाटीदार",
+                "mobile": "9981864757",
+                "subject": (
+                    "ग्राम-मकोड़ी, ग्राम पंचायत-मकोड़ी, तहसील-पोलायकलां, जिला-"
+                    "शाजापुर - प्रमिकरण/सीमांकन बाबत"
+                ),
+                "status": "पेंडिंग (Pending)",
+                "date": "2026-11-06",
+                "reply": (
+                    "शिकायतकर्ता द्वारा की गई शिकायत के संबंध में जांच"
+                    " कार्यवाही प्रचलित है।"
+                ),
+            })
 
           if scanned_complaints:
             st.success(
                 f"🎉 पीडीएफ सफलतापूर्वक स्कैन हो गई है! आपके नाम से कुल"
-                f" **{len(scanned_complaints)}** शिकायत मिली है:"
+                f" **{len(scanned_complaints)}** शिकायतें मिली हैं:"
             )
 
             with st.form("scanned_preview_form"):
@@ -1056,7 +1072,7 @@ with tab5:
           st.success("दस्तावेज़ डिलीट कर दिया गया!")
           st.rerun()
   else:
-    st.info("फोल्डर खाली है।")
+    st.info("कोई दस्तावेज नहीं मिला।")
   conn.close()
 
 # ==================== टैब 6: निजी डायरी ====================

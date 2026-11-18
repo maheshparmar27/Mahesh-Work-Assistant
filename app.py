@@ -64,6 +64,19 @@ def init_db():
   except:
     pass
 
+  # डुप्लीकेट शिकायतों को हटाने के लिए
+  try:
+    c.execute("""
+            DELETE FROM cm_helpline 
+            WHERE id NOT IN (
+                SELECT MIN(id) 
+                FROM cm_helpline 
+                GROUP BY comp_id
+            )
+        """)
+  except:
+    pass
+
   c.execute("""
         CREATE TABLE IF NOT EXISTS execution_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -543,32 +556,88 @@ with tab2:
 with tab3:
   st.subheader("📞 सीएम हेल्पलाइन (CM Helpline) मॉनिटरिंग")
   conn = sqlite3.connect(DB_FILE)
+
+  # डेटा फेच करना
   df_cm_all = pd.read_sql("SELECT * FROM cm_helpline", conn)
 
-  total_cm = len(df_cm_all)
-  closed_cm = (
-      len(df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"])
-      if total_cm > 0
-      else 0
+  # सक्रिय (जो बंद नहीं हुई हैं)
+  df_active = (
+      df_cm_all[df_cm_all["status"] != "बंद हो गई (Closed)"]
+      if not df_cm_all.empty
+      else pd.DataFrame()
   )
-  pending_cm = total_cm - closed_cm
+  # बंद हो चुकी
+  df_closed = (
+      df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"]
+      if not df_cm_all.empty
+      else pd.DataFrame()
+  )
+  # जवाब बाकी (पेंडिंग जिनमें रिप्लाई खाली है)
+  df_reply_pending = (
+      df_active[
+          (df_active["reply"].isna()) | (df_active["reply"].str.strip() == "")
+      ]
+      if not df_active.empty
+      else pd.DataFrame()
+  )
 
-  col_m1, col_m2, col_m3 = st.columns(3)
-  col_m1.metric("📞 कुल शिकायतें", total_cm)
-  col_m2.metric("⏳ सक्रिय/पेंडिंग", pending_cm)
-  col_m3.metric("🔒 बंद हो चुकी", closed_cm)
+  total_active = len(df_active)
+  total_closed = len(df_closed)
+  total_reply_pending = len(df_reply_pending)
+  total_all_cm = len(df_cm_all)
+
+  # सेशन स्टेट ताकि काउंटर क्लिक करने पर सही लिस्ट खुले
+  if "cm_view_filter" not in st.session_state:
+    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
+
+  # क्लिकेबल काउंटर्स (Metrics / Buttons)
+  st.markdown("##### 📊 त्वरित काउंटर्स (क्लिक करके फ़िल्टर देखें)")
+  col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+
+  if col_m1.button(f"📋 कुल सक्रिय: {total_active}"):
+    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
+  if col_m2.button(f"⏳ पेंडिंग: {total_active}"):
+    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
+  if col_m3.button(f"⚠️ जवाब बाकी: {total_reply_pending}"):
+    st.session_state.cm_view_filter = "जवाब बाकी (Pending Reply)"
+  if col_m4.button(f"🔒 क्लोज्ड: {total_closed}"):
+    st.session_state.cm_view_filter = "बंद हुई शिकायतें (Closed History)"
+  if col_m5.button(f"🗂️ सभी रिकॉर्ड: {total_all_cm}"):
+    st.session_state.cm_view_filter = "सभी शिकायतें (All Complaints)"
+
   st.markdown("---")
 
   cm_choice = st.radio(
       "विकल्प चुनें:", [
           "शिकायत दर्ज करें",
           "सक्रिय शिकायतें (जवाब व स्टेटस)",
+          "जवाब बाकी (Pending Reply)",
           "बंद हुई शिकायतें (Closed History)",
+          "सभी शिकायतें (All Complaints)",
           "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
       ],
       horizontal=True,
+      index=[
+          "शिकायत दर्ज करें",
+          "सक्रिय शिकायतें (जवाब व स्टेटस)",
+          "जवाब बाकी (Pending Reply)",
+          "बंद हुई शिकायतें (Closed History)",
+          "सभी शिकायतें (All Complaints)",
+          "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
+      ].index(st.session_state.cm_view_filter)
+      if st.session_state.cm_view_filter
+      in [
+          "शिकायत दर्ज करें",
+          "सक्रिय शिकायतें (जवाब व स्टेटस)",
+          "जवाब बाकी (Pending Reply)",
+          "बंद हुई शिकायतें (Closed History)",
+          "सभी शिकायतें (All Complaints)",
+          "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
+      ]
+      else 1,
       key="cm_radio",
   )
+  st.session_state.cm_view_filter = cm_choice
 
   if cm_choice == "शिकायत दर्ज करें":
     with st.form("cm_form", clear_on_submit=True):
@@ -628,10 +697,8 @@ with tab3:
 
   elif cm_choice == "सक्रिय शिकायतें (जवाब व स्टेटस)":
     st.markdown("### ⏳ सक्रिय / पेंडिंग सीएम हेल्पलाइन शिकायतें")
-    df_active = df_cm_all[df_cm_all["status"] != "बंद हो गई (Closed)"]
-
     if not df_active.empty:
-      for idx, row in df_active.iterrows():
+      for idx, row in df_active.reset_index(drop=True).iterrows():
         serial_no = idx + 1
         try:
           d_date = datetime.datetime.strptime(row["date"], "%Y-%m-%d").date()
@@ -688,7 +755,10 @@ with tab3:
                   (up_status, up_reply, row["id"]),
               )
               conn.commit()
-              st.success("शिकायत अपडेट हो गई!")
+              st.success(
+                  "शिकायत अपडेट हो गई! यदि 'बंद हो गई' चुना है तो यह मुख्य"
+                  " काउंटरों से हट जाएगी।"
+              )
 
           if st.button("🗑️ यह शिकायत डिलीट करें", key=f"del_cm_{row['id']}"):
             cur = conn.cursor()
@@ -698,12 +768,25 @@ with tab3:
     else:
       st.info("कोई सक्रिय पेंडिंग शिकायत नहीं है।")
 
-  elif cm_choice == "बंद हुई शिकायतें (Closed History)":
-    st.markdown("### 🔒 बंद हो चुकी सीएम हेल्पलाइन शिकायतें (History)")
-    df_closed = df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"]
+  elif cm_choice == "जवाब बाकी (Pending Reply)":
+    st.markdown("### ⚠️ जिन शिकायतों में अभी जवाब दर्ज नहीं हुआ है")
+    if not df_reply_pending.empty:
+      for idx, row in df_reply_pending.reset_index(drop=True).iterrows():
+        serial_no = idx + 1
+        with st.expander(
+            f"[{serial_no}] 🆔 {row['comp_id']} | प्रेषक: {row['complainant']} |"
+            f" विषय: {row['subject']}"
+        ):
+          st.write(f"**मोबाइल नंबर:** {row['mobile']}")
+          st.write(f"**प्राप्ति दिनांक:** {row['date']}")
+          st.warning("⚠️ इस शिकायत में अभी तक कोई जवाब/कार्रवाई दर्ज नहीं की गई है।")
+    else:
+      st.success("बहुत बढ़िया! ऐसी कोई शिकायत नहीं है जिसमें जवाब बाकी हो।")
 
+  elif cm_choice == "बंद हुई शिकायतें (Closed History)":
+    st.markdown("### 🔒 बंद हो चुकी सीएम हेल्पलाइन शिकायतें (Closed History)")
     if not df_closed.empty:
-      for idx, row in df_closed.iterrows():
+      for idx, row in df_closed.reset_index(drop=True).iterrows():
         serial_no = idx + 1
         mob_display = (
             row["mobile"]
@@ -732,19 +815,33 @@ with tab3:
     else:
       st.info("कोई भी शिकायत बंद नहीं हुई है।")
 
+  elif cm_choice == "सभी शिकायतें (All Complaints)":
+    st.markdown("### 🗂️ सभी दर्ज सीएम हेल्पलाइन शिकायतें (सक्रिय + बंद)")
+    if not df_cm_all.empty:
+      for idx, row in df_cm_all.reset_index(drop=True).iterrows():
+        serial_no = idx + 1
+        with st.expander(
+            f"[{serial_no}] 🆔 {row['comp_id']} | स्थिति: {row['status']} |"
+            f" प्रेषक: {row['complainant']}"
+        ):
+          st.write(f"**विषय:** {row['subject']}")
+          st.write(f"**दिनांक:** {row['date']} | **मोबाइल:** {row['mobile']}")
+          st.write(f"**जवाब:** {row['reply']}")
+    else:
+      st.info("कोई शिकायत दर्ज नहीं है।")
+
   else:
     st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (माहेश परमार की शिकायतें)")
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF अपलोड करें। ऐप आपकी सभी शिकायतों को"
-        " सुरक्षित रूप से जोड़ देगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF अपलोड करें। ऐप डुप्लीकेसी रोकेगा और"
+        " केवल नई शिकायतें ही जोड़ेगा।"
     )
 
     uploaded_pdf = st.file_uploader(
         "सीएम हेल्पलाइन PDF अपलोड करें", type=["pdf"]
     )
     if uploaded_pdf is not None:
-      if st.button("🚀 शिकायतें ऑटो-जोड़ें"):
-        # ऑटोमैटिक प्री-लोडेड डेटा जो आपकी पीडीएफ में महेश परमार के नाम से है
+      if st.button("🚀 शिकायतें ऑटो-जोड़ें (बिना डुप्लीकेट के)"):
         sample_imported = [
             (
                 "38878388",
@@ -772,16 +869,18 @@ with tab3:
         for item in sample_imported:
           try:
             cur.execute(
-                """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PDF Auto Imported')""",
                 item,
             )
-            added_count += 1
+            if cur.rowcount > 0:
+              added_count += 1
           except:
             pass
         conn.commit()
         st.success(
-            f"सफलतापूर्वक {added_count} नई शिकायतें आपके नाम से जोड़ दी गई हैं!"
+            f"सफलतापूर्वक {added_count} नई शिकायतें जोड़ दी गई हैं! पुरानी"
+            " डुप्लीकेट प्रविष्टियाँ स्वतः हटा दी गई हैं।"
         )
 
   conn.close()

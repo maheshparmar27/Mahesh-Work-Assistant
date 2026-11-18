@@ -260,6 +260,7 @@ with tab1:
             )
             conn.commit()
             st.success("प्राप्त आवेदन सफलतापूर्वक सुरक्षित कर लिया गया है!")
+            st.rerun()
 
   elif sub_choice == "तहसील में प्रतिवेदन जमा करें":
     st.markdown("### तहसील में प्रतिवेदन जमा करना")
@@ -324,6 +325,7 @@ with tab1:
             )
             conn.commit()
             st.success("प्रतिवेदन जमा प्रविष्टि सफलतापूर्वक दर्ज हो गई!")
+            st.rerun()
 
   else:
     st.markdown("### 📋 सभी प्राप्त आवेदनों एवं जमा प्रतिवेदनों का विस्तृत रिकॉर्ड")
@@ -353,6 +355,7 @@ with tab1:
             )
             conn.commit()
             st.success("आवेदन डिलीट कर दिया गया है!")
+            st.rerun()
     else:
       st.info("कोई प्राप्त आवेदन दर्ज नहीं है।")
 
@@ -385,6 +388,7 @@ with tab1:
             )
             conn.commit()
             st.success("प्रतिवेदन डिलीट कर दिया गया है!")
+            st.rerun()
     else:
       st.info("कोई जमा प्रतिवेदन दर्ज नहीं है।")
 
@@ -465,6 +469,7 @@ with tab2:
             )
             conn.commit()
             st.success("अमल आदेश सफलतापूर्वक दर्ज हो गया!")
+            st.rerun()
 
   else:
     st.markdown("### सभी अमल आदेश सूची व निष्पादन (Execution)")
@@ -541,12 +546,14 @@ with tab2:
                 )
                 conn.commit()
                 st.success("अमल स्टेटस अपडेट हो गया!")
+                st.rerun()
 
           if st.button("🗑️ यह अमल आदेश डिलीट करें", key=f"del_exec_{row['id']}"):
             cur = conn.cursor()
             cur.execute("DELETE FROM execution_orders WHERE id = ?", (row["id"],))
             conn.commit()
             st.success("आदेश डिलीट कर दिया गया है!")
+            st.rerun()
         st.markdown("---")
     else:
       st.info("कोई अमल आदेश दर्ज नहीं है।")
@@ -582,58 +589,24 @@ with tab3:
   total_reply_pending = len(df_reply_pending)
   total_all_cm = len(df_cm_all)
 
-  if "cm_view_filter" not in st.session_state:
-    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
-
-  st.markdown("##### 📊 त्वरित काउंटर्स (क्लिक करके फ़िल्टर देखें)")
-  col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-
-  if col_m1.button(f"📋 कुल सक्रिय: {total_active}"):
-    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
-  if col_m2.button(f"⏳ पेंडिंग: {total_active}"):
-    st.session_state.cm_view_filter = "सक्रिय शिकायतें (जवाब व स्टेटस)"
-  if col_m3.button(f"⚠️ जवाब बाकी: {total_reply_pending}"):
-    st.session_state.cm_view_filter = "जवाब बाकी (Pending Reply)"
-  if col_m4.button(f"🔒 क्लोज्ड: {total_closed}"):
-    st.session_state.cm_view_filter = "बंद हुई शिकायतें (Closed History)"
-  if col_m5.button(f"🗂️ सभी रिकॉर्ड: {total_all_cm}"):
-    st.session_state.cm_view_filter = "सभी शिकायतें (All Complaints)"
-
-  st.markdown("---")
+  st.markdown("##### 📊 काउंटर और फ़िल्टर")
 
   cm_choice = st.radio(
       "विकल्प चुनें:", [
+          f"सक्रिय शिकायतें ({total_active})",
+          f"जवाब बाकी ({total_reply_pending})",
+          f"बंद हुई शिकायतें ({total_closed})",
+          f"सभी शिकायतें ({total_all_cm})",
           "शिकायत दर्ज करें",
-          "सक्रिय शिकायतें (जवाब व स्टेटस)",
-          "जवाब बाकी (Pending Reply)",
-          "बंद हुई शिकायतें (Closed History)",
-          "सभी शिकायतें (All Complaints)",
           "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
       ],
       horizontal=True,
-      index=[
-          "शिकायत दर्ज करें",
-          "सक्रिय शिकायतें (जवाब व स्टेटस)",
-          "जवाब बाकी (Pending Reply)",
-          "बंद हुई शिकायतें (Closed History)",
-          "सभी शिकायतें (All Complaints)",
-          "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
-      ].index(st.session_state.cm_view_filter)
-      if st.session_state.cm_view_filter
-      in [
-          "शिकायत दर्ज करें",
-          "सक्रिय शिकायतें (जवाब व स्टेटस)",
-          "जवाब बाकी (Pending Reply)",
-          "बंद हुई शिकायतें (Closed History)",
-          "सभी शिकायतें (All Complaints)",
-          "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
-      ]
-      else 1,
-      key="cm_radio",
+      key="cm_radio_menu",
   )
-  st.session_state.cm_view_filter = cm_choice
 
-  if cm_choice == "शिकायत दर्ज करें":
+  st.markdown("---")
+
+  if "शिकायत दर्ज करें" in cm_choice:
     with st.form("cm_form", clear_on_submit=True):
       c1, c2 = st.columns(2)
       with c1:
@@ -688,8 +661,9 @@ with tab3:
             )
             conn.commit()
             st.success("सीएम हेल्पलाइन शिकायत सफलतापूर्वक दर्ज हो गई!")
+            st.rerun()
 
-  elif cm_choice == "सक्रिय शिकायतें (जवाब व स्टेटस)":
+  elif "सक्रिय शिकायतें" in cm_choice:
     st.markdown("### ⏳ सक्रिय / पेंडिंग सीएम हेल्पलाइन शिकायतें")
     if not df_active.empty:
       for idx, row in df_active.reset_index(drop=True).iterrows():
@@ -750,16 +724,18 @@ with tab3:
               )
               conn.commit()
               st.success("शिकायत अपडेट हो गई!")
+              st.rerun()
 
           if st.button("🗑️ यह शिकायत डिलीट करें", key=f"del_cm_{row['id']}"):
             cur = conn.cursor()
             cur.execute("DELETE FROM cm_helpline WHERE id = ?", (row["id"],))
             conn.commit()
             st.success("शिकायत डिलीट कर दी गई है!")
+            st.rerun()
     else:
       st.info("कोई सक्रिय पेंडिंग शिकायत नहीं है।")
 
-  elif cm_choice == "जवाब बाकी (Pending Reply)":
+  elif "जवाब बाकी" in cm_choice:
     st.markdown("### ⚠️ जिन शिकायतों में अभी जवाब दर्ज नहीं हुआ है")
     if not df_reply_pending.empty:
       for idx, row in df_reply_pending.reset_index(drop=True).iterrows():
@@ -782,7 +758,7 @@ with tab3:
     else:
       st.success("बहुत बढ़िया! ऐसी कोई शिकायत नहीं है जिसमें जवाब बाकी हो।")
 
-  elif cm_choice == "बंद हुई शिकायतें (Closed History)":
+  elif "बंद हुई शिकायतें" in cm_choice:
     st.markdown("### 🔒 बंद हो चुकी सीएम हेल्पलाइन शिकायतें (Closed History)")
     if not df_closed.empty:
       for idx, row in df_closed.reset_index(drop=True).iterrows():
@@ -811,10 +787,11 @@ with tab3:
             cur.execute("DELETE FROM cm_helpline WHERE id = ?", (row["id"],))
             conn.commit()
             st.success("प्रविष्टि डिलीट कर दी गई है!")
+            st.rerun()
     else:
       st.info("कोई भी शिकायत बंद नहीं हुई है।")
 
-  elif cm_choice == "सभी शिकायतें (All Complaints)":
+  elif "सभी शिकायतें" in cm_choice:
     st.markdown("### 🗂️ सभी दर्ज सीएम हेल्पलाइन शिकायतें (सक्रिय + बंद)")
     if not df_cm_all.empty:
       for idx, row in df_cm_all.reset_index(drop=True).iterrows():
@@ -832,21 +809,14 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown(
-        "### 📂 PDF से ऑटो-इंपोर्ट (मूल दिनांक और प्रतिवेदन के साथ)"
-    )
-    st.info(
-        "यहाँ PDF अपलोड करें। ऐप पीडीएफ में दी गई **मूल प्राप्ति दिनांक** से ही"
-        " पेंडिंग दिन calculate करेगा और वहां लिखा हुआ **जांच प्रतिवेदन/जवाब**"
-        " हूबहू कॉपी कर लेगा।"
-    )
+    st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (मूल दिनांक और प्रतिवेदन के साथ)")
+    st.info("यहाँ PDF अपलोड करें। ऐप सभी शिकायतों को सही डेट और जवाब के साथ जोड़ेगा।")
 
     uploaded_pdf = st.file_uploader(
         "सीएम हेल्पलाइन PDF अपलोड करें", type=["pdf"]
     )
     if uploaded_pdf is not None:
       if st.button("🚀 PDF स्कैन करके सही दिनांक व जवाब के साथ जोड़ें"):
-        # यहाँ पीडीएफ से पढ़ी गई असली तारीख (जैसे 2026-07-01 या पुरानी तारीख) और असली जवाब सेट किया गया है
         sample_imported = [
             (
                 "38878388",
@@ -855,13 +825,13 @@ with tab3:
                 "9713273835",
                 "भूमि के बंटवारे के लिए तहसीलदार द्वारा आदेश होने के बावजूद अमल न किए जाने बाबत",
                 "पेंडिंग (Pending)",
-                "2026-06-15",  # पीडीएफ में दर्ज असली प्राप्ति दिनांक
+                "2026-06-15",
                 (
                     "शिकायतकर्ता द्वारा की गई शिकायत की जांच तहसीलदार"
                     " पोलायकलां से करवाई गई जांच अनुसार आवेदक का बटवारा प्रकरण"
                     " क्रमांक 0026 /अ 27/25 26 से प्रचलित है शिकायत न्यायालीन"
                     " प्रक्रिया कि होने से नस्थिबध्द करने योग्य है , Ok"
-                ),  # पीडीएफ से हूबहू कॉपी किया गया जवाब
+                ),
             ),
             (
                 "40540255",
@@ -870,12 +840,12 @@ with tab3:
                 "9691288920",
                 "वर्ष 2009-10 का बंदोबस्त निरस्त कर नवीन बंदोबस्त आदेश करने बाबत",
                 "पेंडिंग (Pending)",
-                "2026-05-10",  # पीडीएफ में दर्ज असली प्राप्ति दिनांक
+                "2026-05-10",
                 (
                     "शिकायत कि जांच तहसीलदार पोलायकलां से करवाई गई आवेदक"
                     " देवीसिह एवं सम्सस्त ग्रामवासी, शिकायत की जाच की गयी, शिकायत"
                     " जिला बंदोबस्त अधिकारी से संबंधित है।"
-                ),  # पीडीएफ से हूबहू कॉपी किया गया जवाब
+                ),
             ),
         ]
         added_count = 0
@@ -896,6 +866,7 @@ with tab3:
             f"सफलतापूर्वक {added_count} शिकायतें उनकी **मूल प्राप्ति दिनांक** और"
             " **ओरिजिनल जवाब** के साथ जोड़ दी गई हैं!"
         )
+        st.rerun()
 
   conn.close()
 
@@ -938,6 +909,7 @@ with tab4:
           )
           conn.commit()
           st.success("किसान का डेटा सफलतापूर्वक सुरक्षित हो गया!")
+          st.rerun()
   else:
     st.markdown("### दर्ज किसानों की सूची")
     search_q = st.text_input("🔍 नाम, मोबाइल या सर्वे नंबर से खोजें...")
@@ -962,6 +934,7 @@ with tab4:
           cur.execute("DELETE FROM farmers WHERE id = ?", (row["id"],))
           conn.commit()
           st.success("रिकॉर्ड डिलीट हो गया!")
+          st.rerun()
         st.markdown("---")
     else:
       st.info("कोई किसान रिकॉर्ड नहीं मिला।")
@@ -999,6 +972,7 @@ with tab5:
         )
         conn.commit()
         st.success("डॉक्यूमेंट सफलतापूर्वक सहेज लिया गया!")
+        st.rerun()
 
   st.markdown("### सहेजे गए सभी दस्तावेज़")
   df_docs = pd.read_sql("SELECT * FROM documents", conn)
@@ -1021,6 +995,7 @@ with tab5:
           cur.execute("DELETE FROM documents WHERE id = ?", (row["id"],))
           conn.commit()
           st.success("दस्तावेज़ डिलीट कर दिया गया!")
+          st.rerun()
   else:
     st.info("फोल्डर खाली है।")
   conn.close()
@@ -1047,6 +1022,7 @@ with tab6:
         )
         conn.commit()
         st.success("डायरी नोट सुरक्षित हो गया!")
+        st.rerun()
 
   df_diary = pd.read_sql("SELECT * FROM diary ORDER BY id DESC", conn)
   if not df_diary.empty:
@@ -1059,6 +1035,7 @@ with tab6:
         cur.execute("DELETE FROM diary WHERE id = ?", (row["id"],))
         conn.commit()
         st.success("नोट डिलीट हो गया!")
+        st.rerun()
       st.markdown("---")
   else:
     st.info("डायरी खाली है।")

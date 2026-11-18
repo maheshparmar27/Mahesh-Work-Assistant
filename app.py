@@ -376,8 +376,7 @@ with tab1:
           if row["file_name"]:
             st.download_button(
                 label=f"📥 डाउनलोड पावती ({row['file_name']})",
-                data=row["file_data"],
-                file_name=row["file_name"],
+                data=row["file_name"],
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
@@ -811,13 +810,10 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown(
-        "### 📂 PDF से ऑटो-इंपोर्ट (केवल अंग्रेजी 'MAHRESH PARMAR' अंतिम कॉलम"
-        " जाँच)"
-    )
+    st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (केवल अंतिम पंक्ति में MAHESH PARMAR)")
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप केवल उस लाइन को पकड़ेगा"
-        " जिसके आखिर में अंग्रेजी में **'MAHESH PARMAR'** लिखा होगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप केवल उस शिकायत को उठाएगा"
+        " जिसके **अंत में बिल्कुल सटीक अंग्रेजी में 'MAHESH PARMAR'** लिखा होगा।"
     )
 
     uploaded_pdf = st.file_uploader(
@@ -825,7 +821,7 @@ with tab3:
     )
 
     if uploaded_pdf is not None:
-      with st.spinner("पीडीएफ स्कैन हो रही है..."):
+      with st.spinner("पीडीएफ की अंतिम पंक्तियाँ जाँची जा रही हैं..."):
         try:
           reader = pypdf.PdfReader(uploaded_pdf)
           scanned_complaints = []
@@ -836,11 +832,9 @@ with tab3:
               lines = page_text.split("\n")
               for line in lines:
                 clean_line = line.strip()
-                # सख्त नियम: केवल अंग्रेजी में सटीक 'MAHESH PARMAR' लाइन के अंत में होना चाहिए
-                if clean_line.endswith("MAHESH PARMAR") or clean_line.endswith(
-                    "Mahesh Parmar"
-                ):
-                  # इस ब्लॉक/रो से 8 अंकों का शिकायत नंबर (ID) निकालें
+                # बिल्कुल सख्त नियम: केवल और केवल अंतिम पंक्ति/हिस्से में 'MAHESH PARMAR' होना चाहिए
+                if clean_line.upper().endswith("MAHESH PARMAR"):
+                  # उस ब्लॉक से 8-अंकों का शिकायत नंबर ढूँढें
                   ids = re.findall(r"\b\d{8}\b", page_text)
                   comp_id = (
                       ids[0]
@@ -848,7 +842,7 @@ with tab3:
                       else f"COMP_{page_num}_{int(datetime.datetime.now().timestamp()) % 1000}"
                   )
 
-                  # तारीख निकालें
+                  # तारीख ढूँढें
                   dates = re.findall(
                       r"\b\d{2}[-/]\d{2}[-/]\d{4}\b|\b\d{4}[-/]\d{2}[-/]\d{2}\b",
                       page_text,
@@ -857,7 +851,7 @@ with tab3:
                       dates[0] if dates else str(datetime.date.today())
                   )
 
-                  # मोबाइल नंबर निकालें
+                  # मोबाइल नंबर ढूँढें
                   mobiles = re.findall(r"\b[6-9]\d{9}\b", page_text)
                   mobile = mobiles[0] if mobiles else "उपलब्ध नहीं"
 
@@ -866,10 +860,7 @@ with tab3:
                       "level": "L1",
                       "complainant": "अंतिम कॉलम प्रेषक",
                       "mobile": mobile,
-                      "subject": (
-                          f"अंतिम कॉलम में 'MAHESH PARMAR' मिलने पर स्वतः"
-                          f" स्कैन (पेज {page_num + 1})"
-                      ),
+                      "subject": f"शिकायत (अंतिम कॉलम मैच - पेज {page_num + 1})",
                       "status": "पेंडिंग (Pending)",
                       "date": comp_date,
                       "reply": clean_line,
@@ -877,8 +868,8 @@ with tab3:
 
           if scanned_complaints:
             st.success(
-                f"🎉 स्कैन पूरा हुआ! अंतिम कॉलम में अंग्रेजी 'MAHESH PARMAR'"
-                f" से कुल **{len(scanned_complaints)}** शिकायतें मिली हैं:"
+                f"🎉 स्कैन पूरा हुआ! अंतिम कॉलम में 'MAHESH PARMAR' मिलने पर कुल"
+                f" **{len(scanned_complaints)}** शिकायतें मिली हैं:"
             )
 
             with st.form("scanned_preview_form"):
@@ -890,7 +881,7 @@ with tab3:
                 )
                 st.write(f"📝 **विषय:** {comp['subject']}")
                 st.write(f"📅 **दिनांक:** {comp['date']}")
-                st.write(f"💬 **अतिम कॉलम डेटा:** {comp['reply']}")
+                st.write(f"💬 **अंतिम कॉलम डेटा:** {comp['reply']}")
 
                 is_selected = st.checkbox(
                     f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp['comp_id']})",
@@ -911,7 +902,7 @@ with tab3:
                   try:
                     cur.execute(
                         """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Scanned strictly by English Last Column')""",
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Scanned strictly by Last Row MAHESH PARMAR')""",
                         (
                             comp["comp_id"],
                             comp["level"],
@@ -936,8 +927,8 @@ with tab3:
                 st.rerun()
           else:
             st.warning(
-                "इस पीडीएफ के अंतिम कॉलम में अंग्रेजी में 'MAHESH PARMAR'"
-                " लिखा हुआ कोई रिकॉर्ड नहीं मिला।"
+                "इस पीडीएफ की किसी भी अंतिम पंक्ति में अंग्रेजी में 'MAHESH"
+                " PARMAR' लिखा हुआ नहीं मिला।"
             )
         except Exception as e:
           st.error(f"पीडीएफ पढ़ने में त्रुटि आई: {e}")
@@ -985,7 +976,7 @@ with tab4:
           st.success("किसान का डेटा सफलतापूर्वक सुरक्षित हो गया!")
           st.rerun()
   else:
-    st.markdown("### दर्ज किसानों की सूची")
+    st.markdown("### दर्ज किसानों की सूची निगम")
     search_q = st.text_input("🔍 नाम, मोबाइल या सर्वे नंबर से खोजें...")
     query = (
         f"SELECT * FROM farmers WHERE name LIKE '%{search_q}%' OR mobile LIKE"
@@ -1071,7 +1062,7 @@ with tab5:
           st.success("दस्तावेज़ डिलीट कर दिया गया!")
           st.rerun()
   else:
-    st.info("कोई दस्तावेज नहीं मिला।")
+     st.info("कोई दस्तावेज नहीं मिला।")
   conn.close()
 
 # ==================== टैब 6: निजी डायरी ====================
@@ -1106,7 +1097,7 @@ with tab6:
       st.write(row["note"])
       if st.button("🗑️ नोट डिलीट करें", key=f"del_diary_{row['id']}"):
         cur = conn.cursor()
-        cur.execute("DELETE FROM diary WHERE id = ?", (row["id"],))
+        cur.execute("DELETE DELETE FROM diary WHERE id = ?", (row["id"],))
         conn.commit()
         st.success("नोट डिलीट हो गया!")
         st.rerun()

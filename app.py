@@ -16,7 +16,8 @@ DB_FILE = "mahesh_work_assistant.db"
 def init_db():
   conn = sqlite3.connect(DB_FILE)
   c = conn.cursor()
-  # प्राप्त आवेदन टेबल
+
+  # 1. प्राप्त आवेदन टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS received_apps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +30,8 @@ def init_db():
             file_data BLOB
         )
     """)
-  # जमा प्रतिवेदन टेबल
+
+  # 2. जमा प्रतिवेदन टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS submitted_reports (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,20 +43,53 @@ def init_db():
             file_data BLOB
         )
     """)
-  # सीएम हेल्पलाइन टेबल
+
+  # 3. सीएम हेल्पलाइन टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS cm_helpline (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            comp_id TEXT,
+            comp_id TEXT UNIQUE,
             level TEXT,
             complainant TEXT,
+            mobile TEXT,
             subject TEXT,
             status TEXT,
             date TEXT,
+            reply TEXT,
             remarks TEXT
         )
     """)
-  # दस्तावेज़ फोल्डर टेबल
+
+  # 4. अमल आदेश टेबल
+  c.execute("""
+        CREATE TABLE IF NOT EXISTS execution_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_no TEXT UNIQUE,
+            receipt_date TEXT,
+            details TEXT,
+            status TEXT,
+            orig_file_name TEXT,
+            orig_file_data BLOB,
+            khasra_file_name TEXT,
+            khasra_file_data BLOB,
+            b1_file_name TEXT,
+            b1_file_data BLOB
+        )
+    """)
+
+  # 5. किसान डेटाबेस टेबल
+  c.execute("""
+        CREATE TABLE IF NOT EXISTS farmers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            father_name TEXT,
+            mobile TEXT,
+            aadhaar TEXT,
+            survey_no TEXT
+        )
+    """)
+
+  # 6. दस्तावेज़ फोल्डर टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +100,8 @@ def init_db():
             file_data BLOB
         )
     """)
-  # निजी डायरी टेबल
+
+  # 7. निजी डायरी टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS diary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,17 +127,18 @@ st.markdown(
         color: #1F2937;
     }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
+        gap: 5px;
         background-color: #F3F4F6;
-        padding: 10px;
+        padding: 8px;
         border-radius: 8px;
     }
     .stTabs [data-baseweb="tab"] {
         background-color: #FFFFFF;
         border-radius: 6px;
-        padding: 8px 16px;
+        padding: 6px 12px;
         font-weight: bold;
         color: #374151;
+        font-size: 14px;
     }
     .stTabs [aria-selected="true"] {
         background-color: #2563EB !important;
@@ -115,11 +152,12 @@ st.markdown(
 st.title("📂 Mahesh Personal Assistant")
 st.markdown("---")
 
-# मोबाइल के अनुकूल टॉप टैब्स लेआउट
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📥 आवेदन एवं प्रतिवेदन",
+# मोबाइल के अनुकूल टॉप टैब्स लेआउट (अब 6 टैब्स)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📥 आवेदन व प्रतिवेदन",
     "⚙️ अमल आदेश",
     "📞 सीएम हेल्पलाइन",
+    "👨‍🌾 किसान डायरेक्टरी",
     "📁 दस्तावेज़ फोल्डर",
     "📔 निजी डायरी",
 ])
@@ -128,25 +166,48 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
   st.subheader("तहसील आवेदन और प्रतिवेदन प्रबंधन")
 
-  sub_choice = st.radio(
-      "चुनें:", [
-          "तहसील से प्राप्त आवेदन / जानकारी दर्ज करें",
-          "तहसील में प्रतिवेदन जमा करें",
-          "सभी रिकॉर्ड देखें (डिटेल व अटैच फाइल)",
-      ],
-      horizontal=True,
-  )
-
   conn = sqlite3.connect(DB_FILE)
 
-  if sub_choice == "तहसील से प्राप्त आवेदन / जानकारी दर्ज करें":
+  # डैशबोर्ड / काउंटर
+  df_rec_count = pd.read_sql("SELECT COUNT(*) as cnt FROM received_apps", conn)
+  df_sub_count = pd.read_sql(
+      "SELECT COUNT(*) as cnt FROM submitted_reports", conn
+  )
+  total_rec = df_rec_count["cnt"].iloc[0]
+  total_sub = df_sub_count["cnt"].iloc[0]
+  pending_rep = total_rec - total_sub
+
+  col_c1, col_c2, col_c3 = st.columns(3)
+  col_c1.metric("📥 कुल प्राप्त आवेदन", total_rec)
+  col_c2.metric("📤 जमा प्रतिवेदन", total_sub)
+  col_c3.metric("⏳ प्रतिवेदन बाकी", max(0, pending_rep))
+  st.markdown("---")
+
+  sub_choice = st.radio(
+      "चुनें:", [
+          "तहसील से प्राप्त आवेदन दर्ज करें",
+          "तहसील में प्रतिवेदन जमा करें",
+          "सभी रिकॉर्ड देखें व डिलीट करें",
+      ],
+      horizontal=True,
+      key="app_radio",
+  )
+
+  if sub_choice == "तहसील से प्राप्त आवेदन दर्ज करें":
     st.markdown("### नया प्राप्त आवेदन दर्ज करें")
     with st.form("received_form", clear_on_submit=True):
       col1, col2 = st.columns(2)
       with col1:
-        sender = st.text_input("प्रेषक का नाम (Sender Name)")
+        sender = st.text_input("प्रेषक का नाम (Sender Name) *")
         medium = st.selectbox(
-            "माध्यम (Medium)", ["व्हाट्सएप", "डाक", "व्यक्तिगत", "तहसीलदार महोदय"]
+            "माध्यम (Medium)", [
+                "व्हाट्सएप",
+                "डाक",
+                "व्यक्तिगत",
+                "तहसीलदार महोदय",
+                "SAARA App",
+                "SAARA Portal 2.0",
+            ]
         )
       with col2:
         date = st.date_input(
@@ -156,7 +217,11 @@ with tab1:
       st.markdown("##### प्रकरण क्रमांक संरचना")
       c1, c2, c3 = st.columns(3)
       with c1:
-        num_part = st.text_input("4-डिजिट नंबर (जैसे 0123)", "0001")
+        num_part = st.text_input(
+            "4-डिजिट नंबर (जैसे 0123)",
+            "",
+            placeholder="नंबर दर्ज करें",
+        )
       with c2:
         mad_part = st.selectbox(
             "मद (Mad)", ["A-3", "A-6", "A-27", "B-121", "अन्य"]
@@ -164,10 +229,12 @@ with tab1:
       with c3:
         year_part = st.selectbox(
             "वर्ष (Year)", list(range(1950, 2051)), index=76
-        )  # 2026 default
+        )
 
-      case_no = f"{num_part} / {mad_part} / {year_part}"
-      st.info(structured_case := f"सत्यापित प्रकरण क्रमांक: **{case_no}**")
+      case_no = ""
+      if num_part.strip():
+        case_no = f"{num_part.strip()} / {mad_part} / {year_part}"
+        st.info(f"सत्यापित प्रकरण क्रमांक: **{case_no}**")
 
       details = st.text_area("अन्य विवरण / संदेश का सार (Details)")
       uploaded_file = st.file_uploader(
@@ -177,29 +244,47 @@ with tab1:
 
       submitted = st.form_submit_button("सुरक्षित करें")
       if submitted:
-        file_name = uploaded_file.name if uploaded_file else ""
-        file_data = uploaded_file.read() if uploaded_file else b""
+        if not sender.strip() or not num_part.strip():
+          st.error(
+              "कृपया प्रेषक का नाम और प्रकरण नंबर ठीक से भरें! फॉर्म खाली नहीं"
+              " छोड़ सकते।"
+          )
+        else:
+          # डुप्लीकेट चेक
+          cursor = conn.cursor()
+          cursor.execute(
+              "SELECT id FROM received_apps WHERE case_no = ?", (case_no,)
+          )
+          if cursor.fetchone():
+            st.error(
+                f"त्रुटि: प्रकरण क्रमांक '{case_no}' पहले से दर्ज है! डुप्लीकेट"
+                " एंट्री स्वीकार नहीं है।"
+            )
+          else:
+            file_name = uploaded_file.name if uploaded_file else ""
+            file_data = uploaded_file.read() if uploaded_file else b""
 
-        c = conn.cursor()
-        c.execute(
-            """INSERT INTO received_apps (sender, medium, date, case_no, details, file_name, file_data)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                sender,
-                medium,
-                str(date),
-                case_no,
-                details,
-                file_name,
-                file_data,
-            ),
-        )
-        conn.commit()
-        st.success("प्राप्त आवेदन सफलतापूर्वक सुरक्षित कर लिया गया है!")
+            cursor.execute(
+                """INSERT INTO received_apps (sender, medium, date, case_no, details, file_name, file_data)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    sender,
+                    medium,
+                    str(date),
+                    case_no,
+                    details,
+                    file_name,
+                    file_data,
+                ),
+            )
+            conn.commit()
+            st.success(
+                "प्राप्त आवेदन सफलतापूर्वक सुरक्षित कर लिया गया है! (पेज रिफ्रेश"
+                " करें)"
+            )
 
   elif sub_choice == "तहसील में प्रतिवेदन जमा करें":
     st.markdown("### तहसील में प्रतिवेदन जमा करना")
-    # केवल लंबित प्राप्त आवेदनों की सूची प्राप्त करें
     df_rec = pd.read_sql("SELECT id, case_no, sender FROM received_apps", conn)
 
     if df_rec.empty:
@@ -208,7 +293,7 @@ with tab1:
       )
     else:
       app_options = {
-          f"ID: {row['id']} | प्र प्रकरण: {row['case_no']} (प्रेषक: {row['sender']})": row[
+          f"ID: {row['id']} | प्रकरण: {row['case_no']} (प्रेषक: {row['sender']})": row[
               "id"
           ]
           for index, row in df_rec.iterrows()
@@ -230,10 +315,11 @@ with tab1:
                   "आरसीएमएस (RCMS)",
                   "वाहन/डाक",
                   "व्यक्तिगत रूप से",
+                  "SAARA App",
               ]
           )
 
-        sub_details = st.text_area("जमा किए गए प्रतिवेदन का विवरण / सार")
+        sub_details = st.text_area("जमा किए गए प्रतिवेदन का विवरण / सार *")
         sub_file = st.file_uploader(
             "जमा प्रतिवेदन की पावती / कॉपी अपलोड करें (PDF/Image)",
             type=["pdf", "jpg", "png", "jpeg"],
@@ -241,24 +327,27 @@ with tab1:
 
         sub_btn = st.form_submit_button("प्रतिवेदन जमा दर्ज करें")
         if sub_btn:
-          f_name = sub_file.name if sub_file else ""
-          f_data = sub_file.read() if sub_file else b""
+          if not sub_details.strip():
+            st.error("कृपया प्रतिवेदन का विवरण अवश्य भरें!")
+          else:
+            f_name = sub_file.name if sub_file else ""
+            f_data = sub_file.read() if sub_file else b""
 
-          c = conn.cursor()
-          c.execute(
-              """INSERT INTO submitted_reports (app_id, submit_date, medium, details, file_name, file_data)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-              (
-                  str(selected_app_id),
-                  str(submit_date),
-                  sub_medium,
-                  sub_details,
-                  f_name,
-                  f_data,
-              ),
-          )
-          conn.commit()
-          st.success("प्रतिवेदन जमा प्रविष्टि सफलतापूर्वक दर्ज हो गई!")
+            c = conn.cursor()
+            c.execute(
+                """INSERT INTO submitted_reports (app_id, submit_date, medium, details, file_name, file_data)
+                         VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    str(selected_app_id),
+                    str(submit_date),
+                    sub_medium,
+                    sub_details,
+                    f_name,
+                    f_data,
+                ),
+            )
+            conn.commit()
+            st.success("प्रतिवेदन जमा प्रविष्टि सफलतापूर्वक दर्ज हो गई!")
 
   else:
     st.markdown("### 📋 सभी प्राप्त आवेदनों एवं जमा प्रतिवेदनों का विस्तृत रिकॉर्ड")
@@ -267,22 +356,31 @@ with tab1:
     df_rec_all = pd.read_sql("SELECT * FROM received_apps", conn)
     if not df_rec_all.empty:
       for idx, row in df_rec_all.iterrows():
+        serial_no = idx + 1
         with st.expander(
-            f"प्रकरण: {row['case_no']} | प्रेषक: {row['sender']} ({row['date']})"
+            f"[{serial_no}] प्रकरण: {row['case_no']} | प्रेषक: {row['sender']}"
+            f" ({row['date']})"
         ):
           st.write(f"**माध्यम:** {row['medium']}")
           st.write(f"**विवरण:** {row['details']}")
           if row["file_name"]:
-            st.write(f"**अटैच फाइल:** {row['file_name']}")
             st.download_button(
-                label=f"📥 डाउनलोड/देखें फाइल ({row['file_name']})",
+                label=f"📥 डाउनलोड फाइल ({row['file_name']})",
                 data=row["file_data"],
                 file_name=row["file_name"],
                 mime="application/octet-stream",
-                key=f"rec_{row['id']}",
+                key=f"rec_dl_{row['id']}",
             )
           else:
-            st.info("कोई फाइल अटैच नहीं की गई थी।")
+            st.info("कोई फाइल अटैच नहीं थी।")
+
+          if st.button("🗑️ यह आवेदन डिलीट करें", key=f"del_rec_{row['id']}"):
+            c = conn.cursor()
+            c.execute(
+                "DELETE FROM received_apps WHERE id = ?", (row["id"],)
+            )
+            conn.commit()
+            st.success("आवेदन डिलीट कर दिया गया है! पेज रीफ्रेश करें। कौशल.")
     else:
       st.info("कोई प्राप्त आवेदन दर्ज नहीं है।")
 
@@ -291,22 +389,33 @@ with tab1:
     df_sub_all = pd.read_sql("SELECT * FROM submitted_reports", conn)
     if not df_sub_all.empty:
       for idx, row in df_sub_all.iterrows():
+        serial_no = idx + 1
         with st.expander(
-            f"संबंधित आवेदन ID: {row['app_id']} | जमा दिनांक: {row['submit_date']}"
+            f"[{serial_no}] संबंधित आवेदन ID: {row['app_id']} | जमा दिनांक:"
+            f" {row['submit_date']}"
         ):
           st.write(f"**माध्यम:** {row['medium']}")
           st.write(f"**विवरण:** {row['details']}")
           if row["file_name"]:
-            st.write(f"**अटैच फाइल:** {row['file_name']}")
             st.download_button(
-                label=f"📥 डाउनलोड/देखें पावती ({row['file_name']})",
+                label=f"📥 डाउनलोड पावती ({row['file_name']})",
                 data=row["file_data"],
                 file_name=row["file_name"],
                 mime="application/octet-stream",
-                key=f"sub_{row['id']}",
+                key=f"sub_dl_{row['id']}",
             )
           else:
-            st.info("कोई फाइल अटैच नहीं की गई थी।")
+            st.info("कोई फाइल अटैच नहीं थी।")
+
+          if st.button(
+              "🗑️ यह प्रतिवेदन डिलीट करें", key=f"del_sub_{row['id']}"
+          ):
+            c = conn.cursor()
+            c.execute(
+                "DELETE FROM submitted_reports WHERE id = ?", (row["id"],)
+            )
+            conn.commit()
+            st.success("प्रतिवेदन डिलीट कर दिया गया है!")
     else:
       st.info("कोई जमा प्रतिवेदन दर्ज नहीं है।")
 
@@ -314,110 +423,467 @@ with tab1:
 
 # ==================== टैब 2: अमल आदेश ====================
 with tab2:
-  st.subheader("अमल आदेश ट्रैकिंग (Orders Tracking)")
-  st.info("यहाँ आपके तहसील से पारित होने वाले अमल आदेशों की प्रविष्टि रहेगी।")
-  # इसे भी इसी तरह डेटाबेस से जोड़ा जा सकता है, फिलहाल ढांचा तैयार है।
+  st.subheader("⚙️ अमल आदेश ट्रैकिंग (Orders Execution & Tracking)")
+
+  conn = sqlite3.connect(DB_FILE)
+  df_exec_all = pd.read_sql("SELECT * FROM execution_orders", conn)
+
+  total_orders = len(df_exec_all)
+  executed_orders = (
+      len(df_exec_all[df_exec_all["status"] == "अमल कर दिया गया"])
+      if total_orders > 0
+      else 0
+  )
+  pending_orders = total_orders - executed_orders
+
+  col_e1, col_e2, col_e3 = st.columns(3)
+  col_e1.metric("📦 कुल प्राप्त आदेश", total_orders)
+  col_e2.metric("⏳ अमल बाकी (Pending)", pending_orders)
+  col_e3.metric("✅ अमल हो चुका", executed_orders)
+  st.markdown("---")
+
+  exec_choice = st.radio(
+      "विकल्प चुनें:", [
+          "नया अमल आदेश दर्ज करें",
+          "लंबित व पूर्ण आदेश सूची (अमल करें/डिलीट)",
+      ],
+      horizontal=True,
+      key="exec_radio",
+  )
+
+  if exec_choice == "नया अमल आदेश दर्ज करें":
+    st.markdown("### तहसील से प्राप्त अमल आदेश दर्ज करें")
+    with st.form("exec_form", clear_on_submit=True):
+      c1, c2 = st.columns(2)
+      with c1:
+        order_no = st.text_input(
+            "प्रकरण / आदेश क्रमांक *", "", placeholder="जैसे 12/अ-6/2026"
+        )
+      with c2:
+        receipt_date = st.date_input(
+            "प्राप्ति दिनांक", datetime.date.today(), key="exec_dt"
+        )
+
+      details = st.text_area("आदेश का विवरण / किसके पक्ष में है *")
+      orig_file = st.file_uploader(
+          "तहसील से प्राप्त मूल आदेश अपलोड करें (PDF/Image)",
+          type=["pdf", "jpg", "png", "jpeg"],
+      )
+
+      exec_sub = st.form_submit_button("आदेश सुरक्षित करें")
+      if exec_sub:
+        if not order_no.strip() or not details.strip():
+          st.error("कृपया आदेश क्रमांक और विवरण अवश्य भरें!")
+        else:
+          cursor = conn.cursor()
+          cursor.execute(
+              "SELECT id FROM execution_orders WHERE order_no = ?", (order_no,)
+          )
+          if cursor.fetchone():
+            st.error(f"त्रुटि: आदेश क्रमांक '{order_no}' पहले से दर्ज है!")
+          else:
+            f_name = orig_file.name if orig_file else ""
+            f_data = orig_file.read() if orig_file else b""
+
+            cursor.execute(
+                """INSERT INTO execution_orders (order_no, receipt_date, details, status, orig_file_name, orig_file_data)
+                         VALUES (?, ?, ?, 'लंबित (Pending)', ?, ?)""",
+                (
+                    order_no.strip(),
+                    str(receipt_date),
+                    details,
+                    f_name,
+                    f_data,
+                ),
+            )
+            conn.commit()
+            st.success("अमल आदेश सफलतापूर्वक दर्ज हो गया!")
+
+  else:
+    st.markdown("### सभी अमल आदेश सूची व निष्पादन (Execution)")
+    if not df_exec_all.empty:
+      for idx, row in df_exec_all.iterrows():
+        serial_no = idx + 1
+        st.markdown(
+            f"**{serial_no}. आदेश क्र.: {row['order_no']}** | दिनांक:"
+            f" {row['receipt_date']} | स्थिति: **{row['status']}**"
+        )
+        with st.expander(f"विवरण व दस्तावेज़ देखें (आदेश क्र. {row['order_no']})"):
+          st.write(f"**विवरण:** {row['details']}")
+          if row["orig_file_name"]:
+            st.download_button(
+                label=f"📥 मूल आदेश डाउनलोड ({row['orig_file_name']})",
+                data=row["orig_file_data"],
+                file_name=row["orig_file_name"],
+                mime="application/octet-stream",
+                key=f"orig_dl_{row['id']}",
+            )
+
+          # यदि अमल हो चुका है, तो खसरा और B1 डाउनलोड बटन दिखाएं
+          if row["status"] == "अमल कर दिया गया":
+            st.success("✅ इस आदेश पर अमल किया जा चुका है।")
+            if row["khasra_file_name"]:
+              st.download_button(
+                  label=f"📥 अमल पश्चात खसरा ({row['khasra_file_name']})",
+                  data=row["khasra_file_data"],
+                  file_name=row["khasra_file_name"],
+                  mime="application/octet-stream",
+                  key=f"kh_dl_{row['id']}",
+              )
+            if row["b1_file_name"]:
+              st.download_button(
+                  label=f"📥 अमल पश्चात B-1 ({row['b1_file_name']})",
+                  data=row["b1_file_data"],
+                  file_name=row["b1_file_name"],
+                  mime="application/octet-stream",
+                  key=f"b1_dl_{row['id']}",
+              )
+          else:
+            # अमल करने का फॉर्म (स्टेट्स बदलना और खसरा/B1 अपलोड करना)
+            st.markdown("---")
+            st.markdown("##### ✍️ अमल करें और प्रूफ अपलोड करें")
+            with st.form(f"do_exec_form_{row['id']}"):
+              new_status = st.selectbox(
+                  "स्थिति बदलें", ["लंबित (Pending)", "अमल कर दिया गया"], index=1
+              )
+              kh_file = st.file_uploader(
+                  "अमल के बाद का खसरा अपलोड करें (PDF/Image)",
+                  type=["pdf", "jpg", "png", "jpeg"],
+                  key=f"kh_{row['id']}",
+              )
+              b1_file = st.file_uploader(
+                  "अमल के बाद का B-1 अपलोड करें (PDF/Image)",
+                  type=["pdf", "jpg", "png", "jpeg"],
+                  key=f"b1_{row['id']}",
+              )
+              update_btn = st.form_submit_button("अमल सुरक्षित करें")
+
+              if update_btn:
+                kh_name = kh_file.name if kh_file else ""
+                kh_data = kh_file.read() if kh_file else b""
+                b1_name = b1_file.name if b1_file else ""
+                b1_data = b1_file.read() if b1_file else b""
+
+                cur = conn.cursor()
+                cur.execute(
+                    """UPDATE execution_orders SET status = ?, khasra_file_name = ?, khasra_file_data = ?, b1_file_name = ?, b1_file_data = ?
+                             WHERE id = ?""",
+                    (
+                        new_status,
+                        kh_name,
+                        kh_data,
+                        b1_name,
+                        b1_data,
+                        row["id"],
+                    ),
+                )
+                conn.commit()
+                st.success("अमल स्टेटस अपडेट हो गया! पेज रीफ्रेश करें।")
+
+          if st.button("🗑️ यह अमल आदेश डिलीट करें", key=f"del_exec_{row['id']}"):
+            cur = conn.cursor()
+            cur.execute("DELETE FROM execution_orders WHERE id = ?", (row["id"],))
+            conn.commit()
+            st.success("आदेश डिलीट कर दिया गया है!")
+        st.markdown("---")
+    else:
+      st.info("कोई अमल आदेश दर्ज नहीं है।")
+
+  conn.close()
 
 # ==================== टैब 3: सीएम हेल्पलाइन ====================
 with tab3:
   st.subheader("📞 सीएम हेल्पलाइन (CM Helpline) मॉनिटरिंग")
 
-  cm_choice = st.radio(
-      "विकल्प चुनें:", ["शिकायत दर्ज करें", "सभी शिकायतें देखें"], horizontal=True
-  )
   conn = sqlite3.connect(DB_FILE)
+  df_cm_all = pd.read_sql("SELECT * FROM cm_helpline", conn)
+
+  # सीएम हेल्पलाइन डैशबोर्ड काउंटर्स
+  total_cm = len(df_cm_all)
+  closed_cm = (
+      len(df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"])
+      if total_cm > 0
+      else 0
+  )
+  pending_cm = total_cm - closed_cm
+
+  col_m1, col_m2, col_m3 = st.columns(3)
+  col_m1.metric("📞 कुल शिकायतें", total_cm)
+  col_m2.metric("⏳ सक्रिय/पेंडिंग", pending_cm)
+  col_m3.metric("🔒 बंद हो चुकी", closed_cm)
+  st.markdown("---")
+
+  cm_choice = st.radio(
+      "विकल्प चुनें:", [
+          "शिकायत दर्ज करें",
+          "सक्रिय शिकायतें (जवाब व स्टेटस)",
+          "बंद हुई शिकायतें (Closed History)",
+      ],
+      horizontal=True,
+      key="cm_radio",
+  )
 
   if cm_choice == "शिकायत दर्ज करें":
     with st.form("cm_form", clear_on_submit=True):
       c1, c2 = st.columns(2)
       with c1:
-        comp_id = st.text_input("शिकायत क्रमांक (Complaint ID)")
+        comp_id = st.text_input(
+            "शिकायत क्रमांक (Complaint ID) *", "", placeholder="नंबर दर्ज करें"
+        )
         level = st.selectbox("स्तर (Level)", ["L1", "L2", "L3"])
-      with c2:
         complainant = st.text_input("शिकायतकर्ता का नाम")
-        date = st.date_input("प्राप्ति दिनांक", datetime.date.today())
+      with c2:
+        mobile = st.text_input("शिकायतकर्ता का मोबाइल नंबर")
+        date = st.date_input(
+            "प्राप्ति दिनांक", datetime.date.today(), key="cm_dt"
+        )
+        status = st.selectbox(
+            "स्थिति (Status)", [
+                "पेंडिंग (Pending)",
+                "जवाब दर्ज (Reply Submitted)",
+                "बंद हो गई (Closed)",
+            ]
+        )
 
-      subject = st.text_input("विषय / संक्षिप्त समस्या")
-      status = st.selectbox(
-          "स्थिति (Status)", ["लंबित (Pending)", "निराकृत (Resolved)"]
-      )
-      remarks = st.text_area("विवरण / की गई कार्रवाई")
+      subject = st.text_input("विषय / संक्षिप्त समस्या *")
+      reply = st.text_area("जवाब / कार्रवाई का विवरण (Reply / Action Taken)")
+      remarks = st.text_area("अन्य टिप्पणी (Remarks)")
 
       cm_submit = st.form_submit_button("शिकायत सुरक्षित करें")
       if cm_submit:
-        c = conn.cursor()
-        c.execute(
-            """INSERT INTO cm_helpline (comp_id, level, complainant, subject, status, date, remarks)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                comp_id,
-                level,
-                complainant,
-                subject,
-                status,
-                str(date),
-                remarks,
-            ),
-        )
-        conn.commit()
-        st.success("सीएम हेल्पलाइन शिकायत सफलतापूलक दर्ज हो गई!")
-  else:
-    st.markdown("### सभी सीएम हेल्पलाइन शिकायतें")
-    df_cm = pd.read_sql("SELECT * FROM cm_helpline", conn)
-    if not df_cm.empty:
-      # टेबल फॉर्मेट में एक साथ सारी शिकायतें दिखाएं
-      st.dataframe(
-          df_cm[[
-              "comp_id",
-              "level",
-              "complainant",
-              "subject",
-              "status",
-              "date",
-              "remarks",
-          ]],
-          use_container_width=True,
-      )
+        if not comp_id.strip() or not subject.strip():
+          st.error("कृपया शिकायत क्रमांक और विषय अवश्य भरें!")
+        else:
+          cursor = conn.cursor()
+          cursor.execute(
+              "SELECT id FROM cm_helpline WHERE comp_id = ?", (comp_id.strip(),)
+          )
+          if cursor.fetchone():
+            st.error(
+                f"त्रुटि: शिकायत क्रमांक '{comp_id}' पहले से दर्ज है! डुप्लीकेट"
+                " एंट्री वर्जित है।"
+            )
+          else:
+            cursor.execute(
+                """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    comp_id.strip(),
+                    level,
+                    complainant,
+                    mobile,
+                    subject,
+                    status,
+                    str(date),
+                    reply,
+                    remarks,
+                ),
+            )
+            conn.commit()
+            st.success("सीएम हेल्पलाइन शिकायत सफलतापूर्वक दर्ज हो गई!")
+
+  elif cm_choice == "सक्रिय शिकायतें (जवाब व स्टेटस)":
+    st.markdown("### ⏳ सक्रिय / पेंडिंग सीएम हेल्पलाइन शिकायतें")
+    df_active = df_cm_all[df_cm_all["status"] != "बंद हो गई (Closed)"]
+
+    if not df_active.empty:
+      for idx, row in df_active.iterrows():
+        serial_no = idx + 1
+        # पेंडिंग दिनों की ऑटोमैटिक गिनती
+        try:
+          d_date = datetime.datetime.strptime(row["date"], "%Y-%m-%d").date()
+          days_pending = (datetime.date.today() - d_date).days
+        except:
+          days_pending = 0
+
+        # क्लीकेबल आईडी और पूरी डिटेल एक्सपेंडर
+        with st.expander(
+            f"[{serial_no}] 🆔 {row['comp_id']} | स्तर: {row['level']} | प्रेषक:"
+            f" {row['complainant']} | ⏳ पेंडिंग दिन: {days_pending} दिन"
+        ):
+          st.write(f"**मोबाइल नंबर:** {row['mobile']}")
+          st.write(f"**विषय:** {row['subject']}")
+          st.write(f"**प्राप्ति दिनांक:** {row['date']}")
+          st.write(f"**वर्तमान स्थिति:** {row['status']}")
+          st.write(f"**दर्ज जवाब:** {row['reply'] if row['reply'] else 'अभी जवाब नहीं डला है'}")
+          st.write(f"**अन्य टिप्पणी:** {row['remarks']}")
+
+          st.markdown("---")
+          st.markdown("##### ✏️ जवाब व स्टेटस अपडेट करें")
+          with st.form(f"update_cm_{row['id']}"):
+            up_status = st.selectbox(
+                "स्टेट्स चुनें", [
+                    "पेंडिंग (Pending)",
+                    "जवाब दर्ज (Reply Submitted)",
+                    "बंद हो गई (Closed)",
+                ],
+                index=1
+                if row["status"] == "जवाब दर्ज (Reply Submitted)"
+                else 0,
+            )
+            up_reply = st.text_area(
+                "यहाँ जवाब / कार्रवाई दर्ज करें", value=row["reply"]
+            )
+            up_btn = st.form_submit_button("अपडेट सुरक्षित करें")
+
+            if up_btn:
+              cur = conn.cursor()
+              cur.execute(
+                  "UPDATE cm_helpline SET status = ?, reply = ? WHERE id = ?",
+                  (up_status, up_reply, row["id"]),
+              )
+              conn.commit()
+              st.success(
+                  "शिकायत अपडेट हो गई! यदि 'बंद हो गई' चुना है तो यह बंद लिस्ट"
+                  " में चली जाएगी।"
+              )
+
+          if st.button("🗑️ यह शिकायत डिलीट करें", key=f"del_cm_{row['id']}"):
+            cur = conn.cursor()
+            cur.execute("DELETE FROM cm_helpline WHERE id = ?", (row["id"],))
+            conn.commit()
+            st.success("शिकायत डिलीट कर दी गई है!")
     else:
-      st.info("कोई सीएम हेल्पलाइन शिकायत दर्ज नहीं है।")
+      st.info("कोई सक्रिय पेंडिंग शिकायत नहीं है।")
+
+  else:
+    st.markdown("### 🔒 बंद हो चुकी सीएम हेल्पलाइन शिकायतें (History)")
+    df_closed = df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"]
+
+    if not df_closed.empty:
+      for idx, row in df_closed.iterrows():
+        serial_no = idx + 1
+        with st.expander(
+            f"[{serial_no}] 🆔 {row['comp_id']} | प्रेषक: {row['complainant']}"
+            f" | विषय: {row['subject']}"
+        ):
+          st.write(f"**मोबाइल नंबर:** {row['mobile']}")
+          st.write(f"**स्तर:** {row['level']} | **दिनांक:** {row['date']}")
+          st.write(f"**अतिम जवाब/कारण:** {row['reply']}")
+          if st.button(
+              "🗑️ बंद शिकायत को डिलीट करें", key=f"del_closed_{row['id']}"
+          ):
+            cur = conn.cursor()
+            cur.execute("DELETE FROM cm_helpline WHERE id = ?", (row["id"],))
+            conn.commit()
+            st.success("प्रविष्टि डिलीट कर दी गई है!")
+    else:
+      st.info("कोई भी शिकायत बंद नहीं हुई है।")
 
   conn.close()
 
-# ==================== टैब 4: दस्तावेज़ फोल्डर ====================
+# ==================== टैब 4: किसान डायरेक्टरी ====================
 with tab4:
+  st.subheader("👨‍🌾 किसान डेटाबेस (Farmer Directory)")
+
+  conn = sqlite3.connect(DB_FILE)
+  f_choice = st.radio(
+      "विकल्प चुनें:", ["नया किसान दर्ज करें", "सभी किसानों की सूची व खोज"],
+      horizontal=True,
+  )
+
+  if f_choice == "नया किसान दर्ज करें":
+    with st.form("farmer_form", clear_on_submit=True):
+      c1, c2 = st.columns(2)
+      with c1:
+        fname = st.text_input("किसान का पूरा नाम *")
+        ffather = st.text_input("पिता/पति का नाम")
+        fmobile = st.text_input("मोबाइल नंबर")
+      with c2:
+        faadhaar = st.text_input("आधार नंबर (अंतिम अंक या सुरक्षित)")
+        fsurvey = st.text_input("जमीन का सर्वे नंबर / गाला नंबर *")
+
+      f_submit = st.form_submit_button("किसान रिकॉर्ड सुरक्षित करें")
+      if f_submit:
+        if not fname.strip() or not fsurvey.strip():
+          st.error("कृपया किसान का नाम और सर्वे नंबर अवश्य भरें!")
+        else:
+          cur = conn.cursor()
+          cur.execute(
+              """INSERT INTO farmers (name, father_name, mobile, aadhaar, survey_no)
+                       VALUES (?, ?, ?, ?, ?)""",
+              (
+                  fname.strip(),
+                  ffather,
+                  fmobile,
+                  faadhaar,
+                  fsurvey.strip(),
+              ),
+          )
+          conn.commit()
+          st.success("किसान का डेटा सफलतापूर्वक सुरक्षित हो गया!")
+  else:
+    st.markdown("### दर्ज किसानों की सूची")
+    search_q = st.text_input("🔍 नाम, मोबाइल या सर्वे नंबर से खोजें...")
+
+    if search_q.strip():
+      query = f"SELECT * FROM farmers WHERE name LIKE '%{search_q}%' OR mobile LIKE '%{search_q}%' OR survey_no LIKE '%{search_q}%'"
+    else:
+      query = "SELECT * FROM farmers"
+
+    df_farmers = pd.read_sql(query, conn)
+    if not df_farmers.empty:
+      for idx, row in df_farmers.iterrows():
+        serial_no = idx + 1
+        st.markdown(
+            f"**{serial_no}. {row['name']}** (पिता: {row['father_name']})"
+        )
+        st.write(
+            f"📱 मोबाइल: {row['mobile']} | 🗺️ सर्वे नं.: {row['survey_no']}"
+        )
+        if st.button("🗑️ किसान रिकॉर्ड डिलीट करें", key=f"del_f_{row['id']}"):
+          cur = conn.cursor()
+          cur.execute("DELETE FROM farmers WHERE id = ?", (row["id"],))
+          conn.commit()
+          st.success("रिकॉर्ड डिलीट हो गया!")
+        st.markdown("---")
+    else:
+      st.info("कोई किसान रिकॉर्ड नहीं मिला।")
+
+  conn.close()
+
+# ==================== टैब 5: दस्तावेज़ फोल्डर ====================
+with tab5:
   st.subheader("📁 दस्तावेज़ फोल्डर (Khasra, B-1, Maps & PDFs)")
   conn = sqlite3.connect(DB_FILE)
 
   with st.form("doc_form", clear_on_submit=True):
-    doc_name = st.text_input("दस्तावेज़ का नाम (जैसे खसरा ग्राम बानहेड़ा)")
+    doc_name = st.text_input("दस्तावेज़ का नाम *")
     doc_type = st.selectbox(
         "प्रकार", ["खसरा", "बी-वन (B-1)", "नक्शा", "अन्य आदेश/पीडीएफ"]
     )
-    doc_file = st.file_uploader("फाइल अपलोड करें", type=["pdf", "jpg", "png"])
+    doc_file = st.file_uploader(
+        "फाइल अपलोड करें *", type=["pdf", "jpg", "png", "jpeg"]
+    )
     doc_save = st.form_submit_button("फोल्डर में सहेजें")
 
-    if doc_save and doc_file:
-      c = conn.cursor()
-      c.execute(
-          """INSERT INTO documents (doc_name, doc_type, date, file_name, file_data)
-                   VALUES (?, ?, ?, ?, ?)""",
-          (
-              doc_name,
-              doc_type,
-              str(datetime.date.today()),
-              doc_file.name,
-              doc_file.read(),
-          ),
-      )
-      conn.commit()
-      st.success("डॉक्यूमेंट सफलतापूर्वक सहेज लिया गया!")
+    if doc_save:
+      if not doc_name.strip() or not doc_file:
+        st.error("कृपया दस्तावेज़ का नाम और फाइल दोनों दें!")
+      else:
+        c = conn.cursor()
+        c.execute(
+            """INSERT INTO documents (doc_name, doc_type, date, file_name, file_data)
+                     VALUES (?, ?, ?, ?, ?)""",
+            (
+                doc_name.strip(),
+                doc_type,
+                str(datetime.date.today()),
+                doc_file.name,
+                doc_file.read(),
+            ),
+        )
+        conn.commit()
+        st.success("डॉक्यूमेंट सफलतापूर्वक सहेज लिया गया!")
 
   st.markdown("### सहेजे गए सभी दस्तावेज़")
   df_docs = pd.read_sql("SELECT * FROM documents", conn)
   if not df_docs.empty:
     for idx, row in df_docs.iterrows():
+      serial_no = idx + 1
       with st.expander(
-          f"📂 {row['doc_name']} ({row['doc_type']}) - {row['date']}"
+          f"[{serial_no}] 📂 {row['doc_name']} ({row['doc_type']}) -"
+          f" {row['date']}"
       ):
         st.download_button(
             label=f"📥 डाउनलोड करें ({row['file_name']})",
@@ -426,35 +892,53 @@ with tab4:
             mime="application/octet-stream",
             key=f"doc_{row['id']}",
         )
+        if st.button("🗑️ दस्तावेज़ डिलीट करें", key=f"del_doc_{row['id']}"):
+          cur = conn.cursor()
+          cur.execute("DELETE FROM documents WHERE id = ?", (row["id"],))
+          conn.commit()
+          st.success("दस्तावेज़ डिलीट कर दिया गया!")
   else:
     st.info("फोल्डर खाली है।")
 
   conn.close()
 
-# ==================== टैब 5: निजी डायरी ====================
-with tab5:
+# ==================== टैब 6: निजी डायरी ====================
+with tab6:
   st.subheader("📔 निजी डायरी (Personal Notes)")
   conn = sqlite3.connect(DB_FILE)
 
   with st.form("diary_form", clear_on_submit=True):
-    note_date = st.date_input("दिनांक", datetime.date.today())
-    note_text = st.text_area("आज के मुख्य नोट्स / बातें यहाँ लिखें...")
+    note_date = st.date_input(
+        "दिनांक", datetime.date.today(), key="diary_dt"
+    )
+    note_text = st.text_area("आज के मुख्य नोट्स / बातें यहाँ लिखें... *")
     note_save = st.form_submit_button("नोट्स सेव करें")
 
     if note_save:
-      c = conn.cursor()
-      c.execute(
-          "INSERT INTO diary (date, note) VALUES (?, ?)",
-          (str(note_date), note_text),
-      )
-      conn.commit()
-      st.success("डायरी नोट सुरक्षित हो गया!")
+      if not note_text.strip():
+        st.error("डायरी नोट खाली नहीं हो सकता!")
+      else:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO diary (date, note) VALUES (?, ?)",
+            (str(note_date), note_text),
+        )
+        conn.commit()
+        st.success("डायरी नोट सुरक्षित हो गया!")
 
   df_diary = pd.read_sql("SELECT * FROM diary ORDER BY id DESC", conn)
+  if not df_diary.origin if hasattr(df_diary, "origin") else True:
+    pass
   if not df_diary.empty:
     for idx, row in df_diary.iterrows():
-      st.markdown(f"**📅 {row['date']}**")
+      serial_no = idx + 1
+      st.markdown(f"**[{serial_no}] 📅 {row['date']}**")
       st.write(row["note"])
+      if st.button("🗑️ नोट डिलीट करें", key=f"del_diary_{row['id']})"):
+        cur = conn.cursor()
+        cur.execute("DELETE FROM diary WHERE id = ?", (row["id"],))
+        conn.commit()
+        st.success("नोट डिलीट हो गया!")
       st.markdown("---")
   else:
     st.info("डायरी खाली है।")

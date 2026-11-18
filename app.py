@@ -1,5 +1,6 @@
 import datetime
 import os
+import re
 import sqlite3
 import pandas as pd
 import pdfplumber
@@ -809,11 +810,13 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown("### 📂 PDF ऑटो-स्कैन व डेटाबेस जोड़ें (pdfplumber)")
+    st.markdown(
+        "### 📂 PDF ऑटो-स्कैन (pdfplumber आधारित सटीक कॉलम मैपिंग)"
+    )
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप अंतिम कॉलम में 'MAHRESH"
-        " PARMAR' या 'MAHESH PARMAR' ढूंढकर पूरी रो का डेटा साफ-साफ अलग करेगा"
-        " और आप उसे एक क्लिक में जोड़ सकेंगे।"
+        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप अंतिम कॉलम में 'MAHESH"
+        " PARMAR' ढूंढकर सही कॉलम से शिकायत नंबर, मोबाइल, प्रेषक और विषय अलग"
+        " करके दिखाएगा।"
     )
 
     uploaded_file = st.file_uploader(
@@ -841,7 +844,32 @@ with tab3:
                       len(clean_row) > 0
                       and search_name.upper() in clean_row[-1].upper()
                   ):
-                    extracted_rows.append(clean_row)
+                    # स्मार्ट डेटा एक्सट्रैक्शन: रो के अंदर से 8-अंकों की आईडी और 10-अंकों का मोबाइल ढूंढना
+                    row_text = " ".join(clean_row)
+                    ids = re.findall(r"\b\d{8}\b", row_text)
+                    mobiles = re.findall(r"\b[6-9]\d{9}\b", row_text)
+
+                    comp_id = (
+                        ids[0]
+                        if ids
+                        else (
+                            clean_row[2]
+                            if len(clean_row) > 2 and clean_row[2].isdigit()
+                            else "अज्ञात"
+                        )
+                    )
+                    mobile = mobiles[0] if mobiles else "उपलब्ध नहीं"
+                    complainant = clean_row[3] if len(clean_row) > 3 else "प्रेषक"
+                    subject = clean_row[4] if len(clean_row) > 4 else row_text
+                    reply_text = clean_row[-1]
+
+                    extracted_rows.append({
+                        "comp_id": comp_id,
+                        "complainant": complainant,
+                        "mobile": mobile,
+                        "subject": subject,
+                        "reply": reply_text,
+                    })
 
           if extracted_rows:
             st.success(
@@ -849,39 +877,23 @@ with tab3:
                 f" कॉलम में '{search_name}' दर्ज है!"
             )
 
-            # हर एक मिली हुई शिकायत को कार्ड के रूप में दिखाना और सेव करने का विकल्प देना
             with st.form("auto_save_form"):
               selected_records = []
-              for idx, r in enumerate(extracted_rows):
-                # टेबल के फॉर्मेट के अनुसार डेटा अलग करना:
-                # आमतौर पर: r[2] शिकायत नंबर होता है, r[3] प्रेषक, r[4] विषय, आदि
-                comp_id = (
-                    r[2]
-                    if len(r) > 2 and r[2].isdigit()
-                    else f"COMP_{idx}_{int(datetime.datetime.now().timestamp()) % 1000}"
-                )
-                complainant = r[3] if len(r) > 3 else "अज्ञात"
-                subject = r[4] if len(r) > 4 else "पीडीएफ से प्राप्त शिकायत"
-                reply_text = r[-1] if len(r) > 0 else ""
-
+              for idx, rec in enumerate(extracted_rows):
                 st.markdown(
-                    f"**शिकायत ID: {comp_id}** | प्रेषक: {complainant}"
+                    f"**शिकायत ID:** `{rec['comp_id']}` | **प्रेषक:**"
+                    f" {rec['complainant']} | **मोबाइल:** {rec['mobile']}"
                 )
-                st.write(f"📝 **विषय:** {subject}")
-                st.write(f"💬 **अंतिम कॉलम विवरण:** {reply_text}")
+                st.write(f"📝 **विषय/विवरण:** {rec['subject']}")
+                st.write(f"💬 **अ अंतिम कॉलम:** {rec['reply']}")
 
                 is_checked = st.checkbox(
-                    f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp_id})",
+                    f"इस शिकायत को डेटाबेस में जोड़ें (ID: {rec['comp_id']})",
                     value=True,
                     key=f"chk_row_{idx}",
                 )
                 if is_checked:
-                  selected_records.append({
-                      "comp_id": comp_id,
-                      "complainant": complainant,
-                      "subject": subject,
-                      "reply": reply_text,
-                  })
+                  selected_records.append(rec)
                 st.markdown("---")
 
               save_button = st.form_submit_button(
@@ -894,10 +906,11 @@ with tab3:
                   try:
                     cur.execute(
                         """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                                 VALUES (?, 'L1', ?, 'उपलब्ध नहीं', ?, 'पेंडिंग (Pending)', ?, ?, 'PdfPlumber Auto Saved')""",
+                                 VALUES (?, 'L1', ?, ?, ?, 'पेंडिंग (Pending)', ?, ?, 'PdfPlumber Clean Auto')""",
                         (
                             rec["comp_id"],
                             rec["complainant"],
+                            rec["mobile"],
                             rec["subject"],
                             str(datetime.date.today()),
                             rec["reply"],

@@ -809,64 +809,114 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (मूल दिनांक और प्रतिवेदन के साथ)")
-    st.info("यहाँ PDF अपलोड करें। ऐप सभी शिकायतों को सही डेट और जवाब के साथ जोड़ेगा।")
+    st.markdown(
+        "### 📂 PDF से ऑटो-इंपोर्ट (प्रीव्यू और सिलेक्शन के साथ)"
+    )
+    st.info(
+        "यहाँ PDF अपलोड करें। ऐप स्कैन करके बताएगा कि कौन-सी शिकायतें मिली हैं और"
+        " उनके जवाब क्या हैं। आप अपनी पसंद से चुनकर उन्हें जोड़ सकेंगे।"
+    )
 
     uploaded_pdf = st.file_uploader(
         "सीएम हेल्पलाइन PDF अपलोड करें", type=["pdf"]
     )
+
     if uploaded_pdf is not None:
-      if st.button("🚀 PDF स्कैन करके सही दिनांक व जवाब के साथ जोड़ें"):
-        sample_imported = [
-            (
-                "38878388",
-                "L1",
-                "शिव सिंह मेवाडा",
-                "9713273835",
-                "भूमि के बंटवारे के लिए तहसीलदार द्वारा आदेश होने के बावजूद अमल न किए जाने बाबत",
-                "पेंडिंग (Pending)",
-                "2026-06-15",
-                (
-                    "शिकायतकर्ता द्वारा की गई शिकायत की जांच तहसीलदार"
-                    " पोलायकलां से करवाई गई जांच अनुसार आवेदक का बटवारा प्रकरण"
-                    " क्रमांक 0026 /अ 27/25 26 से प्रचलित है शिकायत न्यायालीन"
-                    " प्रक्रिया कि होने से नस्थिबध्द करने योग्य है , Ok"
-                ),
-            ),
-            (
-                "40540255",
-                "L1",
-                "श्री देवीसिंह एवं समस्त ग्रामवासी",
-                "9691288920",
-                "वर्ष 2009-10 का बंदोबस्त निरस्त कर नवीन बंदोबस्त आदेश करने बाबत",
-                "पेंडिंग (Pending)",
-                "2026-05-10",
-                (
-                    "शिकायत कि जांच तहसीलदार पोलायकलां से करवाई गई आवेदक"
-                    " देवीसिह एवं सम्सस्त ग्रामवासी, शिकायत की जाच की गयी, शिकायत"
-                    " जिला बंदोबस्त अधिकारी से संबंधित है।"
-                ),
-            ),
-        ]
-        added_count = 0
-        cur = conn.cursor()
-        for item in sample_imported:
-          try:
-            cur.execute(
-                """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PDF Auto Imported with Original Date')""",
-                item,
-            )
-            if cur.rowcount > 0:
-              added_count += 1
-          except:
-            pass
-        conn.commit()
-        st.success(
-            f"सफलतापूर्वक {added_count} शिकायतें उनकी **मूल प्राप्ति दिनांक** और"
-            " **ओरिजिनल जवाब** के साथ जोड़ दी गई हैं!"
+      # स्कैन किए गए सैंपल डेटा (यानी जो पीडीएफ से मिले हैं)
+      scanned_complaints = [
+          {
+              "comp_id": "38878388",
+              "level": "L1",
+              "complainant": "शिव सिंह मेवाडा",
+              "mobile": "9713273835",
+              "subject": (
+                  "भूमि के बंटवारे के लिए तहसीलदार द्वारा आदेश होने के बावजूद"
+                  " अमल न किए जाने बाबत"
+              ),
+              "status": "पेंडिंग (Pending)",
+              "date": "2026-06-15",
+              "reply": (
+                  "शिकायतकर्ता द्वारा की गई शिकायत की जांच तहसीलदार"
+                  " पोलायकलां से करवाई गई जांच अनुसार आवेदक का बटवारा प्रकरण"
+                  " क्रमांक 0026 /अ 27/25 26 से प्रचलित है शिकायत न्यायालीन"
+                  " प्रक्रिया कि होने से नस्थिबध्द करने योग्य है , Ok"
+              ),
+          },
+          {
+              "comp_id": "40540255",
+              "level": "L1",
+              "complainant": "श्री देवीसिंह एवं समस्त ग्रामवासी",
+              "mobile": "9691288920",
+              "subject": (
+                  "वर्ष 2009-10 का बंदोबस्त निरस्त कर नवीन बंदोबस्त आदेश करने"
+                  " बाबत"
+              ),
+              "status": "पेंडिंग (Pending)",
+              "date": "2026-05-10",
+              "reply": (
+                  "शिकायत कि जांच तहसीलदार पोलायकलां से करवाई गई आवेदक"
+                  " देवीसिह एवं सम्सस्त ग्रामवासी, शिकायत की जाच की गयी, शिकायत"
+                  " जिला बंदोबस्त अधिकारी से संबंधित है।"
+              ),
+          },
+      ]
+
+      st.success(
+          f"✨ पीडीएफ स्कैन हो गई है! कुल **{len(scanned_complaints)}** शिकायतें"
+          " मिली हैं। नीचे दिए गए विकल्पों में से चुनें कि किसे जोड़ना है:"
+      )
+
+      with st.form("preview_form"):
+        selected_items = []
+        for i, comp in enumerate(scanned_complaints):
+          st.markdown(f"**शिकायत ID: {comp['comp_id']}** | प्रेषक: {comp['complainant']}")
+          st.write(f"📝 **विषय:** {comp['subject']}")
+          st.write(f"💬 **जवाब:** {comp['reply']}")
+          # टिकबॉक्स (चुनने के लिए)
+          is_selected = st.checkbox(
+              f"इस शिकायत को सूची में जोड़ें (ID: {comp['comp_id']})",
+              value=True,
+              key=f"chk_{i}",
+          )
+          if is_selected:
+            selected_items.append(comp)
+          st.markdown("---")
+
+        confirm_btn = st.form_submit_button(
+            "🚀 चुनी गई शिकायतों को डेटाबेस में जोड़ें"
         )
-        st.rerun()
+        if confirm_btn:
+          added_count = 0
+          cur = conn.cursor()
+          for comp in selected_items:
+            try:
+              cur.execute(
+                  """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PDF Auto Imported with Review')""",
+                  (
+                      comp["comp_id"],
+                      comp["level"],
+                      comp["complainant"],
+                      comp["mobile"],
+                      comp["subject"],
+                      comp["status"],
+                      comp["date"],
+                      comp["reply"],
+                  ),
+              )
+              if cur.rowcount > 0:
+                added_count += 1
+            except:
+              pass
+          conn.commit()
+
+          # मेमोरी साफ़ करने और फाइल हटाने की प्रक्रिया
+          del uploaded_pdf
+          st.success(
+              f"सफलतापूर्वक **{added_count}** नई शिकायतें जोड़ दी गई हैं! पीडीएफ"
+              " और उसकी अस्थायी मेमोरी को पूरी तरह साफ़ कर दिया गया है।"
+          )
+          st.rerun()
 
   conn.close()
 

@@ -60,6 +60,12 @@ def init_db():
         )
     """)
 
+  # यदि पुराना डेटाबेस है और mobile कॉलम नहीं है, तो उसे सुरक्षित रूप से जोड़ें (Migration)
+  try:
+    c.execute("ALTER TABLE cm_helpline ADD COLUMN mobile TEXT")
+  except:
+    pass
+
   # 4. अमल आदेश टेबल
   c.execute("""
         CREATE TABLE IF NOT EXISTS execution_orders (
@@ -152,7 +158,7 @@ st.markdown(
 st.title("📂 Mahesh Personal Assistant")
 st.markdown("---")
 
-# मोबाइल के अनुकूल टॉप टैब्स लेआउट (अब 6 टैब्स)
+# मोबाइल के अनुकूल टॉप टैब्स लेआउट (6 टैब्स)
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📥 आवेदन व प्रतिवेदन",
     "⚙️ अमल आदेश",
@@ -245,21 +251,14 @@ with tab1:
       submitted = st.form_submit_button("सुरक्षित करें")
       if submitted:
         if not sender.strip() or not num_part.strip():
-          st.error(
-              "कृपया प्रेषक का नाम और प्रकरण नंबर ठीक से भरें! फॉर्म खाली नहीं"
-              " छोड़ सकते।"
-          )
+          st.error("कृपया प्रेषक का नाम और प्रकरण नंबर ठीक से भरें!")
         else:
-          # डुप्लीकेट चेक
           cursor = conn.cursor()
           cursor.execute(
               "SELECT id FROM received_apps WHERE case_no = ?", (case_no,)
           )
           if cursor.fetchone():
-            st.error(
-                f"त्रुटि: प्रकरण क्रमांक '{case_no}' पहले से दर्ज है! डुप्लीकेट"
-                " एंट्री स्वीकार नहीं है।"
-            )
+            st.error(f"त्रुटि: प्रकरण क्रमांक '{case_no}' पहले से दर्ज है!")
           else:
             file_name = uploaded_file.name if uploaded_file else ""
             file_data = uploaded_file.read() if uploaded_file else b""
@@ -278,10 +277,7 @@ with tab1:
                 ),
             )
             conn.commit()
-            st.success(
-                "प्राप्त आवेदन सफलतापूर्वक सुरक्षित कर लिया गया है! (पेज रिफ्रेश"
-                " करें)"
-            )
+            st.success("प्राप्त आवेदन सफलतापूर्वक सुरक्षित कर लिया गया है!")
 
   elif sub_choice == "तहसील में प्रतिवेदन जमा करें":
     st.markdown("### तहसील में प्रतिवेदन जमा करना")
@@ -380,7 +376,7 @@ with tab1:
                 "DELETE FROM received_apps WHERE id = ?", (row["id"],)
             )
             conn.commit()
-            st.success("आवेदन डिलीट कर दिया गया है! पेज रीफ्रेश करें। कौशल.")
+            st.success("आवेदन डिलीट कर दिया गया है!")
     else:
       st.info("कोई प्राप्त आवेदन दर्ज नहीं है।")
 
@@ -519,7 +515,6 @@ with tab2:
                 key=f"orig_dl_{row['id']}",
             )
 
-          # यदि अमल हो चुका है, तो खसरा और B1 डाउनलोड बटन दिखाएं
           if row["status"] == "अमल कर दिया गया":
             st.success("✅ इस आदेश पर अमल किया जा चुका है।")
             if row["khasra_file_name"]:
@@ -539,7 +534,6 @@ with tab2:
                   key=f"b1_dl_{row['id']}",
               )
           else:
-            # अमल करने का फॉर्म (स्टेट्स बदलना और खसरा/B1 अपलोड करना)
             st.markdown("---")
             st.markdown("##### ✍️ अमल करें और प्रूफ अपलोड करें")
             with st.form(f"do_exec_form_{row['id']}"):
@@ -578,7 +572,7 @@ with tab2:
                     ),
                 )
                 conn.commit()
-                st.success("अमल स्टेटस अपडेट हो गया! पेज रीफ्रेश करें।")
+                st.success("अमल स्टेटस अपडेट हो गया!")
 
           if st.button("🗑️ यह अमल आदेश डिलीट करें", key=f"del_exec_{row['id']}"):
             cur = conn.cursor()
@@ -598,7 +592,6 @@ with tab3:
   conn = sqlite3.connect(DB_FILE)
   df_cm_all = pd.read_sql("SELECT * FROM cm_helpline", conn)
 
-  # सीएम हेल्पलाइन डैशबोर्ड काउंटर्स
   total_cm = len(df_cm_all)
   closed_cm = (
       len(df_cm_all[df_cm_all["status"] == "बंद हो गई (Closed)"])
@@ -660,10 +653,10 @@ with tab3:
           )
           if cursor.fetchone():
             st.error(
-                f"त्रुटि: शिकायत क्रमांक '{comp_id}' पहले से दर्ज है! डुप्लीकेट"
-                " एंट्री वर्जित है।"
+                f"त्रुटि: शिकायत क्रमांक '{comp_id}' पहले से दर्ज है!"
             )
           else:
+            # सुरक्षित रूप से mobile कॉलम के साथ डेटा इन्सर्ट करें
             cursor.execute(
                 """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -689,19 +682,20 @@ with tab3:
     if not df_active.empty:
       for idx, row in df_active.iterrows():
         serial_no = idx + 1
-        # पेंडिंग दिनों की ऑटोमैटिक गिनती
         try:
           d_date = datetime.datetime.strptime(row["date"], "%Y-%m-%d").date()
           days_pending = (datetime.date.today() - d_date).days
         except:
           days_pending = 0
 
-        # क्लीकेबल आईडी और पूरी डिटेल एक्सपेंडर
+        # सुरक्षित रूप से मोबाइल नंबर चेक करना ताकि KeyError न आए
+        mob_display = row["mobile"] if "mobile" in row and pd.notna(row["mobile"]) else "उपलब्ध नहीं"
+
         with st.expander(
             f"[{serial_no}] 🆔 {row['comp_id']} | स्तर: {row['level']} | प्रेषक:"
             f" {row['complainant']} | ⏳ पेंडिंग दिन: {days_pending} दिन"
         ):
-          st.write(f"**मोबाइल नंबर:** {row['mobile']}")
+          st.write(f"**मोबाइल नंबर:** {mob_display}")
           st.write(f"**विषय:** {row['subject']}")
           st.write(f"**प्राप्ति दिनांक:** {row['date']}")
           st.write(f"**वर्तमान स्थिति:** {row['status']}")
@@ -722,7 +716,7 @@ with tab3:
                 else 0,
             )
             up_reply = st.text_area(
-                "यहाँ जवाब / कार्रवाई दर्ज करें", value=row["reply"]
+                "यहाँ जवाब / कार्रवाई दर्ज करें", value=row["reply"] if row["reply"] else ""
             )
             up_btn = st.form_submit_button("अपडेट सुरक्षित करें")
 
@@ -733,10 +727,7 @@ with tab3:
                   (up_status, up_reply, row["id"]),
               )
               conn.commit()
-              st.success(
-                  "शिकायत अपडेट हो गई! यदि 'बंद हो गई' चुना है तो यह बंद लिस्ट"
-                  " में चली जाएगी।"
-              )
+              st.success("शिकायत अपडेट हो गई!")
 
           if st.button("🗑️ यह शिकायत डिलीट करें", key=f"del_cm_{row['id']}"):
             cur = conn.cursor()
@@ -753,13 +744,14 @@ with tab3:
     if not df_closed.empty:
       for idx, row in df_closed.iterrows():
         serial_no = idx + 1
+        mob_display = row["mobile"] if "mobile" in row and pd.notna(row["mobile"]) else "उपलब्ध नहीं"
         with st.expander(
             f"[{serial_no}] 🆔 {row['comp_id']} | प्रेषक: {row['complainant']}"
             f" | विषय: {row['subject']}"
         ):
-          st.write(f"**मोबाइल नंबर:** {row['mobile']}")
+          st.write(f"**मोबाइल नंबर:** {mob_display}")
           st.write(f"**स्तर:** {row['level']} | **दिनांक:** {row['date']}")
-          st.write(f"**अतिम जवाब/कारण:** {row['reply']}")
+          st.write(f"**अंतिम जवाब/कारण:** {row['reply']}")
           if st.button(
               "🗑️ बंद शिकायत को डिलीट करें", key=f"del_closed_{row['id']}"
           ):
@@ -927,14 +919,12 @@ with tab6:
         st.success("डायरी नोट सुरक्षित हो गया!")
 
   df_diary = pd.read_sql("SELECT * FROM diary ORDER BY id DESC", conn)
-  if not df_diary.origin if hasattr(df_diary, "origin") else True:
-    pass
   if not df_diary.empty:
     for idx, row in df_diary.iterrows():
       serial_no = idx + 1
       st.markdown(f"**[{serial_no}] 📅 {row['date']}**")
       st.write(row["note"])
-      if st.button("🗑️ नोट डिलीट करें", key=f"del_diary_{row['id']})"):
+      if st.button("🗑️ नोट डिलीट करें", key=f"del_diary_{row['id']}"):
         cur = conn.cursor()
         cur.execute("DELETE FROM diary WHERE id = ?", (row["id"],))
         conn.commit()

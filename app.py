@@ -1,9 +1,8 @@
 import datetime
 import os
-import re
 import sqlite3
 import pandas as pd
-import pypdf
+import pdfplumber
 import streamlit as st
 
 # पेज की सेटिंग्स
@@ -376,7 +375,8 @@ with tab1:
           if row["file_name"]:
             st.download_button(
                 label=f"📥 डाउनलोड पावती ({row['file_name']})",
-                data=row["file_name"],
+                data=row["file_data"],
+                file_name=row["file_name"],
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
@@ -599,7 +599,7 @@ with tab3:
           f"बंद हुई शिकायतें ({total_closed})",
           f"सभी शिकायतें ({total_all_cm})",
           "शिकायत दर्ज करें",
-          "📂 PDF से ऑटो-इंपोर्ट (Mahesh Parmar)",
+          "📂 PDF से ऑटो-इंपोर्ट (pdfplumber)",
       ],
       horizontal=True,
       key="cm_radio_menu",
@@ -810,128 +810,86 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (केवल अंतिम पंक्ति में MAHESH PARMAR)")
+    st.markdown("### 📄 pdfplumber आधारित ऑटो-स्कैन (लास्ट कॉलम चेक)")
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप केवल उस शिकायत को उठाएगा"
-        " जिसके **अंत में बिल्कुल सटीक अंग्रेजी में 'MAHESH PARMAR'** लिखा होगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें और नाम दर्ज करें। ऐप"
+        " टेबल के अंतिम कॉलम में नाम मैच करके शिकायतें ढूंढ कर लाएगा।"
     )
 
     uploaded_pdf = st.file_uploader(
-        "सीएम हेल्पलाइन PDF अपलोड करें", type=["pdf"]
+        "सीएम हेल्पलाइन की PDF अपलोड करें", type="pdf"
+    )
+    search_name = st.text_input(
+        "खोजने के लिए नाम दर्ज करें", value="MAHESH PARMAR"
     )
 
     if uploaded_pdf is not None:
-      with st.spinner("पीडीएफ की अंतिम पंक्तियाँ जाँची जा रही हैं..."):
-        try:
-          reader = pypdf.PdfReader(uploaded_pdf)
-          scanned_complaints = []
+      if st.button("शिकायतें खोजें"):
+        with st.spinner("PDF स्कैन की जा रही है..."):
+          extracted_data = []
 
-          for page_num in range(len(reader.pages)):
-            page_text = reader.pages[page_num].extract_text()
-            if page_text:
-              lines = page_text.split("\n")
-              for line in lines:
-                clean_line = line.strip()
-                # बिल्कुल सख्त नियम: केवल और केवल अंतिम पंक्ति/हिस्से में 'MAHESH PARMAR' होना चाहिए
-                if clean_line.upper().endswith("MAHESH PARMAR"):
-                  # उस ब्लॉक से 8-अंकों का शिकायत नंबर ढूँढें
-                  ids = re.findall(r"\b\d{8}\b", page_text)
-                  comp_id = (
-                      ids[0]
-                      if ids
-                      else f"COMP_{page_num}_{int(datetime.datetime.now().timestamp()) % 1000}"
-                  )
+          with pdfplumber.open(uploaded_pdf) as pdf:
+            for page in pdf.pages:
+              tables = page.extract_tables()
+              for table in tables:
+                for row in table:
+                  clean_row = [
+                      str(cell).strip().replace("\n", " ") if cell else ""
+                      for cell in row
+                  ]
+                  # चेक करना कि रो में डेटा है और लास्ट कॉलम में नाम मैच हो रहा है
+                  if (
+                      len(clean_row) > 0
+                      and search_name.upper() in clean_row[-1].upper()
+                  ):
+                    extracted_data.append(clean_row)
 
-                  # तारीख ढूँढें
-                  dates = re.findall(
-                      r"\b\d{2}[-/]\d{2}[-/]\d{4}\b|\b\d{4}[-/]\d{2}[-/]\d{2}\b",
-                      page_text,
-                  )
-                  comp_date = (
-                      dates[0] if dates else str(datetime.date.today())
-                  )
-
-                  # मोबाइल नंबर ढूँढें
-                  mobiles = re.findall(r"\b[6-9]\d{9}\b", page_text)
-                  mobile = mobiles[0] if mobiles else "उपलब्ध नहीं"
-
-                  scanned_complaints.append({
-                      "comp_id": comp_id,
-                      "level": "L1",
-                      "complainant": "अंतिम कॉलम प्रेषक",
-                      "mobile": mobile,
-                      "subject": f"शिकायत (अंतिम कॉलम मैच - पेज {page_num + 1})",
-                      "status": "पेंडिंग (Pending)",
-                      "date": comp_date,
-                      "reply": clean_line,
-                  })
-
-          if scanned_complaints:
+          if extracted_data:
             st.success(
-                f"🎉 स्कैन पूरा हुआ! अंतिम कॉलम में 'MAHESH PARMAR' मिलने पर कुल"
-                f" **{len(scanned_complaints)}** शिकायतें मिली हैं:"
+                f"कुल {len(extracted_data)} शिकायतें मिली हैं जिनमें लास्ट"
+                f" कॉलम में '{search_name}' दर्ज है!"
             )
+            df = pd.DataFrame(extracted_data)
+            st.dataframe(df, use_container_width=True)
 
-            with st.form("scanned_preview_form"):
-              selected_items = []
-              for i, comp in enumerate(scanned_complaints):
-                st.markdown(
-                    f"**शिकायत ID: {comp['comp_id']}** | प्रेषक:"
-                    f" {comp['complainant']}"
+            # डेटाबेस में जोड़ने के लिए बटन
+            if st.button("🚀 इन सभी शिकायतों को डेटाबेस में सेव करें"):
+              added = 0
+              cur = conn.cursor()
+              for r in extracted_data:
+                # यहाँ हम टेबल के डेटा को डेटाबेस कॉलम के हिसाब से मैप कर सकते हैं
+                # सामान्यतः टेबल में: [0: Sr, 1: Date/Info, 2: Comp ID, 3: Complainant, ...]
+                # इसे आप अपने हिसाब से एडजस्ट कर सकते हैं
+                comp_id = (
+                    r[2] if len(r) > 2 and r[2].isdigit() else f"COMP_{added+1}"
                 )
-                st.write(f"📝 **विषय:** {comp['subject']}")
-                st.write(f"📅 **दिनांक:** {comp['date']}")
-                st.write(f"💬 **अंतिम कॉलम डेटा:** {comp['reply']}")
-
-                is_selected = st.checkbox(
-                    f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp['comp_id']})",
-                    value=True,
-                    key=f"scan_chk_{i}",
+                complainant = r[3] if len(r) > 3 else "अज्ञात"
+                subject = (
+                    r[4] if len(r) > 4 else "पीडीएफ से स्कैन की गई शिकायत"
                 )
-                if is_selected:
-                  selected_items.append(comp)
-                st.markdown("---")
 
-              save_btn = st.form_submit_button(
-                  "🚀 चुनी गई शिकायतें सूची में जोड़ें"
+                try:
+                  cur.execute(
+                      """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                               VALUES (?, 'L1', ?, 'उपलब्ध नहीं', ?, 'पेंडिंग (Pending)', ?, 'PdfPlumber Auto', 'Auto Imported')""",
+                      (
+                          comp_id,
+                          complainant,
+                          subject,
+                          str(datetime.date.today()),
+                      ),
+                  )
+                  if cur.rowcount > 0:
+                    added += 1
+                except:
+                  pass
+              conn.commit()
+              st.success(
+                  f"सफलतापूर्वक {added} नई शिकायतें डेटाबेस में जोड़ दी गई हैं!"
               )
-              if save_btn:
-                added_count = 0
-                cur = conn.cursor()
-                for comp in selected_items:
-                  try:
-                    cur.execute(
-                        """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Scanned strictly by Last Row MAHESH PARMAR')""",
-                        (
-                            comp["comp_id"],
-                            comp["level"],
-                            comp["complainant"],
-                            comp["mobile"],
-                            comp["subject"],
-                            comp["status"],
-                            comp["date"],
-                            comp["reply"],
-                        ),
-                    )
-                    if cur.rowcount > 0:
-                      added_count += 1
-                  except:
-                    pass
-                conn.commit()
-
-                del uploaded_pdf
-                st.success(
-                    f"सफलतापूर्वक **{added_count}** नई शिकायतें जोड़ दी गई हैं!"
-                )
-                st.rerun()
+              st.rerun()
           else:
-            st.warning(
-                "इस पीडीएफ की किसी भी अंतिम पंक्ति में अंग्रेजी में 'MAHESH"
-                " PARMAR' लिखा हुआ नहीं मिला।"
-            )
-        except Exception as e:
-          st.error(f"पीडीएफ पढ़ने में त्रुटि आई: {e}")
+            st.warning("इस नाम से कोई शिकायत नहीं मिली।")
 
   conn.close()
 
@@ -976,7 +934,7 @@ with tab4:
           st.success("किसान का डेटा सफलतापूर्वक सुरक्षित हो गया!")
           st.rerun()
   else:
-    st.markdown("### दर्ज किसानों की सूची निगम")
+    st.markdown("### दर्ज किसानों की सूची")
     search_q = st.text_input("🔍 नाम, मोबाइल या सर्वे नंबर से खोजें...")
     query = (
         f"SELECT * FROM farmers WHERE name LIKE '%{search_q}%' OR mobile LIKE"
@@ -1062,7 +1020,7 @@ with tab5:
           st.success("दस्तावेज़ डिलीट कर दिया गया!")
           st.rerun()
   else:
-     st.info("कोई दस्तावेज नहीं मिला।")
+    st.info("कोई दस्तावेज नहीं मिला।")
   conn.close()
 
 # ==================== टैब 6: निजी डायरी ====================
@@ -1097,7 +1055,7 @@ with tab6:
       st.write(row["note"])
       if st.button("🗑️ नोट डिलीट करें", key=f"del_diary_{row['id']}"):
         cur = conn.cursor()
-        cur.execute("DELETE DELETE FROM diary WHERE id = ?", (row["id"],))
+        cur.execute("DELETE FROM diary WHERE id = ?", (row["id"],))
         conn.commit()
         st.success("नोट डिलीट हो गया!")
         st.rerun()

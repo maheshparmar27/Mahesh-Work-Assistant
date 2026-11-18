@@ -375,8 +375,7 @@ with tab1:
           if row["file_name"]:
             st.download_button(
                 label=f"📥 डाउनलोड पावती ({row['file_name']})",
-                data=row["file_data"],
-                file_name=row["file_name"],
+                data=row["file_name"],
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
@@ -599,7 +598,7 @@ with tab3:
           f"बंद हुई शिकायतें ({total_closed})",
           f"सभी शिकायतें ({total_all_cm})",
           "शिकायत दर्ज करें",
-          "📂 PDF से ऑटो-इंपोर्ट (pdfplumber)",
+          "📂 PDF ऑटो-स्कैन व डेटाबेस जोड़ें",
       ],
       horizontal=True,
       key="cm_radio_menu",
@@ -810,25 +809,26 @@ with tab3:
       st.info("कोई शिकायत दर्ज नहीं है।")
 
   else:
-    st.markdown("### 📄 pdfplumber आधारित ऑटो-स्कैन (लास्ट कॉलम चेक)")
+    st.markdown("### 📂 PDF ऑटो-स्कैन व डेटाबेस जोड़ें (pdfplumber)")
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें और नाम दर्ज करें। ऐप"
-        " टेबल के अंतिम कॉलम में नाम मैच करके शिकायतें ढूंढ कर लाएगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप अंतिम कॉलम में 'MAHRESH"
+        " PARMAR' या 'MAHESH PARMAR' ढूंढकर पूरी रो का डेटा साफ-साफ अलग करेगा"
+        " और आप उसे एक क्लिक में जोड़ सकेंगे।"
     )
 
-    uploaded_pdf = st.file_uploader(
+    uploaded_file = st.file_uploader(
         "सीएम हेल्पलाइन की PDF अपलोड करें", type="pdf"
     )
     search_name = st.text_input(
         "खोजने के लिए नाम दर्ज करें", value="MAHESH PARMAR"
     )
 
-    if uploaded_pdf is not None:
-      if st.button("शिकायतें खोजें"):
+    if uploaded_file is not None:
+      if st.button("शिकायतें खोजें व प्रीव्यू देखें"):
         with st.spinner("PDF स्कैन की जा रही है..."):
-          extracted_data = []
+          extracted_rows = []
 
-          with pdfplumber.open(uploaded_pdf) as pdf:
+          with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
               tables = page.extract_tables()
               for table in tables:
@@ -837,59 +837,85 @@ with tab3:
                       str(cell).strip().replace("\n", " ") if cell else ""
                       for cell in row
                   ]
-                  # चेक करना कि रो में डेटा है और लास्ट कॉलम में नाम मैच हो रहा है
                   if (
                       len(clean_row) > 0
                       and search_name.upper() in clean_row[-1].upper()
                   ):
-                    extracted_data.append(clean_row)
+                    extracted_rows.append(clean_row)
 
-          if extracted_data:
+          if extracted_rows:
             st.success(
-                f"कुल {len(extracted_data)} शिकायतें मिली हैं जिनमें लास्ट"
+                f"🎉 कुल {len(extracted_rows)} शिकायतें मिली हैं जिनमें अंतिम"
                 f" कॉलम में '{search_name}' दर्ज है!"
             )
-            df = pd.DataFrame(extracted_data)
-            st.dataframe(df, use_container_width=True)
 
-            # डेटाबेस में जोड़ने के लिए बटन
-            if st.button("🚀 इन सभी शिकायतों को डेटाबेस में सेव करें"):
-              added = 0
-              cur = conn.cursor()
-              for r in extracted_data:
-                # यहाँ हम टेबल के डेटा को डेटाबेस कॉलम के हिसाब से मैप कर सकते हैं
-                # सामान्यतः टेबल में: [0: Sr, 1: Date/Info, 2: Comp ID, 3: Complainant, ...]
-                # इसे आप अपने हिसाब से एडजस्ट कर सकते हैं
+            # हर एक मिली हुई शिकायत को कार्ड के रूप में दिखाना और सेव करने का विकल्प देना
+            with st.form("auto_save_form"):
+              selected_records = []
+              for idx, r in enumerate(extracted_rows):
+                # टेबल के फॉर्मेट के अनुसार डेटा अलग करना:
+                # आमतौर पर: r[2] शिकायत नंबर होता है, r[3] प्रेषक, r[4] विषय, आदि
                 comp_id = (
-                    r[2] if len(r) > 2 and r[2].isdigit() else f"COMP_{added+1}"
+                    r[2]
+                    if len(r) > 2 and r[2].isdigit()
+                    else f"COMP_{idx}_{int(datetime.datetime.now().timestamp()) % 1000}"
                 )
                 complainant = r[3] if len(r) > 3 else "अज्ञात"
-                subject = (
-                    r[4] if len(r) > 4 else "पीडीएफ से स्कैन की गई शिकायत"
-                )
+                subject = r[4] if len(r) > 4 else "पीडीएफ से प्राप्त शिकायत"
+                reply_text = r[-1] if len(r) > 0 else ""
 
-                try:
-                  cur.execute(
-                      """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                               VALUES (?, 'L1', ?, 'उपलब्ध नहीं', ?, 'पेंडिंग (Pending)', ?, 'PdfPlumber Auto', 'Auto Imported')""",
-                      (
-                          comp_id,
-                          complainant,
-                          subject,
-                          str(datetime.date.today()),
-                      ),
-                  )
-                  if cur.rowcount > 0:
-                    added += 1
-                except:
-                  pass
-              conn.commit()
-              st.success(
-                  f"सफलतापूर्वक {added} नई शिकायतें डेटाबेस में जोड़ दी गई हैं!"
+                st.markdown(
+                    f"**शिकायत ID: {comp_id}** | प्रेषक: {complainant}"
+                )
+                st.write(f"📝 **विषय:** {subject}")
+                st.write(f"💬 **अंतिम कॉलम विवरण:** {reply_text}")
+
+                is_checked = st.checkbox(
+                    f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp_id})",
+                    value=True,
+                    key=f"chk_row_{idx}",
+                )
+                if is_checked:
+                  selected_records.append({
+                      "comp_id": comp_id,
+                      "complainant": complainant,
+                      "subject": subject,
+                      "reply": reply_text,
+                  })
+                st.markdown("---")
+
+              save_button = st.form_submit_button(
+                  "🚀 चुनी गई शिकायतें डेटाबेस में सेव करें"
               )
-              st.rerun()
+              if save_button:
+                saved_count = 0
+                cur = conn.cursor()
+                for rec in selected_records:
+                  try:
+                    cur.execute(
+                        """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                                 VALUES (?, 'L1', ?, 'उपलब्ध नहीं', ?, 'पेंडिंग (Pending)', ?, ?, 'PdfPlumber Auto Saved')""",
+                        (
+                            rec["comp_id"],
+                            rec["complainant"],
+                            rec["subject"],
+                            str(datetime.date.today()),
+                            rec["reply"],
+                        ),
+                    )
+                    if cur.rowcount > 0:
+                      saved_count += 1
+                  except:
+                    pass
+                conn.commit()
+
+                st.success(
+                    f"सफलतापूर्वक **{saved_count}** नई शिकायतें आपकी सक्रिय"
+                    " लिस्ट में जोड़ दी गई हैं!"
+                )
+                st.rerun()
           else:
-            st.warning("इस नाम से कोई शिकायत नहीं मिली।")
+            st.warning("इस नाम से अंतिम कॉलम में कोई शिकायत नहीं मिली।")
 
   conn.close()
 

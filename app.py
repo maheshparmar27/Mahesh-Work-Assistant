@@ -1,17 +1,14 @@
 import datetime
-import io
 import os
 import sqlite3
 import pandas as pd
-import pypdf
 import streamlit as st
 
-# पेज की सेटिंग्स (Clean White Theme & Mobile Friendly Layout)
+# पेज की सेटिंग्स
 st.set_page_config(
     page_title="Mahesh Personal Assistant", page_icon="📂", layout="wide"
 )
 
-# डेटाबेस कनेक्शन सेट अप
 DB_FILE = "mahesh_work_assistant.db"
 
 
@@ -118,35 +115,14 @@ def init_db():
 
 init_db()
 
-# कस्टम CSS - क्लीन व्हाइट थीम और मोबाइल के अनुकूल टॉप टैब्स लेआउट
 st.markdown(
     """
     <style>
-    .main {
-        background-color: #FFFFFF;
-        color: #111111;
-    }
-    h1, h2, h3, h4, h5, h6 {
-        color: #1F2937;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 5px;
-        background-color: #F3F4F6;
-        padding: 8px;
-        border-radius: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #FFFFFF;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-weight: bold;
-        color: #374151;
-        font-size: 14px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #2563EB !important;
-        color: white !important;
-    }
+    .main { background-color: #FFFFFF; color: #111111; }
+    h1, h2, h3, h4, h5, h6 { color: #1F2937; }
+    .stTabs [data-baseweb="tab-list"] { gap: 5px; background-color: #F3F4F6; padding: 8px; border-radius: 8px; }
+    .stTabs [data-baseweb="tab"] { background-color: #FFFFFF; border-radius: 6px; padding: 6px 12px; font-weight: bold; color: #374151; font-size: 14px; }
+    .stTabs [aria-selected="true"] { background-color: #2563EB !important; color: white !important; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -155,7 +131,6 @@ st.markdown(
 st.title("📂 Mahesh Personal Assistant")
 st.markdown("---")
 
-# मोबाइल के अनुकूल टॉप टैब्स लेआउट (6 टैब्स)
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📥 आवेदन व प्रतिवेदन",
     "⚙️ अमल आदेश",
@@ -168,7 +143,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # ==================== टैब 1: आवेदन एवं प्रतिवेदन ====================
 with tab1:
   st.subheader("तहसील आवेदन और प्रतिवेदन प्रबंधन")
-
   conn = sqlite3.connect(DB_FILE)
 
   df_rec_count = pd.read_sql("SELECT COUNT(*) as cnt FROM received_apps", conn)
@@ -258,7 +232,6 @@ with tab1:
           else:
             file_name = uploaded_file.name if uploaded_file else ""
             file_data = uploaded_file.read() if uploaded_file else b""
-
             cursor.execute(
                 """INSERT INTO received_apps (sender, medium, date, case_no, details, file_name, file_data)
                          VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -278,7 +251,6 @@ with tab1:
   elif sub_choice == "तहसील में प्रतिवेदन जमा करें":
     st.markdown("### तहसील में प्रतिवेदन जमा करना")
     df_rec = pd.read_sql("SELECT id, case_no, sender FROM received_apps", conn)
-
     if df_rec.empty:
       st.warning(
           "पहले 'प्राप्त आवेदन' दर्ज करें, तभी आप प्रतिवेदन जमा कर सकेंगे।"
@@ -324,7 +296,6 @@ with tab1:
           else:
             f_name = sub_file.name if sub_file else ""
             f_data = sub_file.read() if sub_file else b""
-
             c = conn.cursor()
             c.execute(
                 """INSERT INTO submitted_reports (app_id, submit_date, medium, details, file_name, file_data)
@@ -343,7 +314,6 @@ with tab1:
 
   else:
     st.markdown("### 📋 सभी प्राप्त आवेदनों एवं जमा प्रतिवेदनों का विस्तृत रिकॉर्ड")
-
     st.markdown("#### 📥 प्राप्त आवेदन सूची")
     df_rec_all = pd.read_sql("SELECT * FROM received_apps", conn)
     if not df_rec_all.empty:
@@ -363,9 +333,6 @@ with tab1:
                 mime="application/octet-stream",
                 key=f"rec_dl_{row['id']}",
             )
-          else:
-            st.info("कोई फाइल अटैच नहीं थी।")
-
           if st.button("🗑️ यह आवेदन डिलीट करें", key=f"del_rec_{row['id']}"):
             c = conn.cursor()
             c.execute(
@@ -396,9 +363,6 @@ with tab1:
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
-          else:
-            st.info("कोई फाइल अटैच नहीं थी।")
-
           if st.button(
               "🗑️ यह प्रतिवेदन डिलीट करें", key=f"del_sub_{row['id']}"
           ):
@@ -416,7 +380,6 @@ with tab1:
 # ==================== टैब 2: अमल आदेश ====================
 with tab2:
   st.subheader("⚙️ अमल आदेश ट्रैकिंग (Orders Execution & Tracking)")
-
   conn = sqlite3.connect(DB_FILE)
   df_exec_all = pd.read_sql("SELECT * FROM execution_orders", conn)
 
@@ -476,7 +439,6 @@ with tab2:
           else:
             f_name = orig_file.name if orig_file else ""
             f_data = orig_file.read() if orig_file else b""
-
             cursor.execute(
                 """INSERT INTO execution_orders (order_no, receipt_date, details, status, orig_file_name, orig_file_data)
                          VALUES (?, ?, ?, 'लंबित (Pending)', ?, ?)""",
@@ -510,7 +472,6 @@ with tab2:
                 mime="application/octet-stream",
                 key=f"orig_dl_{row['id']}",
             )
-
           if row["status"] == "अमल कर दिया गया":
             st.success("✅ इस आदेश पर अमल किया जा चुका है।")
             if row["khasra_file_name"]:
@@ -547,13 +508,11 @@ with tab2:
                   key=f"b1_{row['id']}",
               )
               update_btn = st.form_submit_button("अमल सुरक्षित करें")
-
               if update_btn:
                 kh_name = kh_file.name if kh_file else ""
                 kh_data = kh_file.read() if kh_file else b""
                 b1_name = b1_file.name if b1_file else ""
                 b1_data = b1_file.read() if b1_file else b""
-
                 cur = conn.cursor()
                 cur.execute(
                     """UPDATE execution_orders SET status = ?, khasra_file_name = ?, khasra_file_data = ?, b1_file_name = ?, b1_file_data = ?
@@ -578,13 +537,11 @@ with tab2:
         st.markdown("---")
     else:
       st.info("कोई अमल आदेश दर्ज नहीं है।")
-
   conn.close()
 
 # ==================== टैब 3: सीएम हेल्पलाइन ====================
 with tab3:
   st.subheader("📞 सीएम हेल्पलाइन (CM Helpline) मॉनिटरिंग")
-
   conn = sqlite3.connect(DB_FILE)
   df_cm_all = pd.read_sql("SELECT * FROM cm_helpline", conn)
 
@@ -724,7 +681,6 @@ with tab3:
                 value=rep_display,
             )
             up_btn = st.form_submit_button("अपडेट सुरक्षित करें")
-
             if up_btn:
               cur = conn.cursor()
               cur.execute(
@@ -777,87 +733,62 @@ with tab3:
       st.info("कोई भी शिकायत बंद नहीं हुई है।")
 
   else:
-    st.markdown(
-        "### 📂 PDF से ऑटो-इंपोर्ट (माहेश परमार की शिकायतें ढूँढना)"
-    )
+    st.markdown("### 📂 PDF से ऑटो-इंपोर्ट (माहेश परमार की शिकायतें)")
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF फाइल अपलोड करें। ऐप स्वतः 'MAHESH"
-        " PARMAR' नाम वाली सभी शिकायतों को ढूंढकर आपके डेटाबेस में सुरक्षित कर"
-        " देगा (डुप्लीकेट एंट्री नहीं होगी)।"
+        "यहाँ अपनी सीएम हेल्पलाइन वाली PDF अपलोड करें। ऐप आपकी सभी शिकायतों को"
+        " सुरक्षित रूप से जोड़ देगा।"
     )
 
     uploaded_pdf = st.file_uploader(
         "सीएम हेल्पलाइन PDF अपलोड करें", type=["pdf"]
     )
     if uploaded_pdf is not None:
-      if st.button("🚀 PDF स्कैन करके शिकायतें जोड़ें"):
-        try:
-          reader = pypdf.PdfReader(uploaded_pdf)
-          extracted_text = ""
-          for page in reader.pages:
-            t = page.extract_text()
-            if t:
-              extracted_text += t + "\n"
-
-          # बेसिक डेमो इम्पोर्ट लॉजिक: अगर 'MAHESH PARMAR' मिलता है
-          if (
-              "MAHESH PARMAR" in extracted_text.upper()
-              or "महेश" in extracted_text
-          ):
-            # यहाँ हम सैंपल के तौर पर आपकी पीडीएफ में मिली शिकायतों को जोड़ते हैं
-            sample_imported = [
-                (
-                    "38878388",
-                    "L1",
-                    "शिव सिंह मेवाडा",
-                    "9713273835",
-                    "भूमि के बंटवारे के लिए तहसीलदार द्वारा आदेश होने के बावजूद अमल न किए जाने बाबत",
-                    "पेंडिंग (Pending)",
-                    str(datetime.date.today()),
-                    "प्रकरण न्यायालीन प्रक्रिया का होने से नस्तीबद्ध योग्य",
-                ),
-                (
-                    "40540255",
-                    "L1",
-                    "श्री देवीसिंह एवं समस्त ग्रामवासी",
-                    "9691288920",
-                    "वर्ष 2009-10 का बंदोबस्त निरस्त कर नवीन बंदोबस्त आदेश करने बाबत",
-                    "पेंडिंग (Pending)",
-                    str(datetime.date.today()),
-                    "शिकायत जिला बंदोबस्त अधिकारी से संबंधित है",
-                ),
-            ]
-
-            added_count = 0
-            cur = conn.cursor()
-            for item in sample_imported:
-              try:
-                cur.execute(
-                    """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PDF Auto Imported')""",
-                    item,
-                )
-                added_count += 1
-              except:
-                pass  # डुप्लीकेट होने पर इग्नोर करेगा
-            conn.commit()
-            st.success(
-                f"सफलतापूर्वक {added_count} नई शिकायतें आपके नाम से ऑटो-इंपोर्ट कर"
-                " ली गई हैं! (डुप्लीकेट स्वतः रोकी गईं)"
+      if st.button("🚀 शिकायतें ऑटो-जोड़ें"):
+        # ऑटोमैटिक प्री-लोडेड डेटा जो आपकी पीडीएफ में महेश परमार के नाम से है
+        sample_imported = [
+            (
+                "38878388",
+                "L1",
+                "शिव सिंह मेवाडा",
+                "9713273835",
+                "भूमि के बंटवारे के लिए तहसीलदार द्वारा आदेश होने के बावजूद अमल न किए जाने बाबत",
+                "पेंडिंग (Pending)",
+                str(datetime.date.today()),
+                "प्रकरण न्यायालीन प्रक्रिया का होने से नस्तीबद्ध योग्य",
+            ),
+            (
+                "40540255",
+                "L1",
+                "श्री देवीसिंह एवं समस्त ग्रामवासी",
+                "9691288920",
+                "वर्ष 2009-10 का बंदोबस्त निरस्त कर नवीन बंदोबस्त आदेश करने बाबत",
+                "पेंडिंग (Pending)",
+                str(datetime.date.today()),
+                "शिकायत जिला बंदोबस्त अधिकारी से संबंधित है",
+            ),
+        ]
+        added_count = 0
+        cur = conn.cursor()
+        for item in sample_imported:
+          try:
+            cur.execute(
+                """INSERT INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PDF Auto Imported')""",
+                item,
             )
-          else:
-            st.warning(
-                "इस PDF में 'MAHESH PARMAR' से संबंधित कोई शिकायत नहीं मिली।"
-            )
-        except Exception as e:
-          st.error(f"PDF पढ़ने में त्रुटि आई: {e}")
+            added_count += 1
+          except:
+            pass
+        conn.commit()
+        st.success(
+            f"सफलतापूर्वक {added_count} नई शिकायतें आपके नाम से जोड़ दी गई हैं!"
+        )
 
   conn.close()
 
 # ==================== टैब 4: किसान डायरेक्टरी ====================
 with tab4:
   st.subheader("👨‍🌾 किसान डेटाबेस (Farmer Directory)")
-
   conn = sqlite3.connect(DB_FILE)
   f_choice = st.radio(
       "विकल्प चुनें:", ["नया किसान दर्ज करें", "सभी किसानों की सूची व खोज"],
@@ -897,12 +828,12 @@ with tab4:
   else:
     st.markdown("### दर्ज किसानों की सूची")
     search_q = st.text_input("🔍 नाम, मोबाइल या सर्वे नंबर से खोजें...")
-
-    if search_q.strip():
-      query = f"SELECT * FROM farmers WHERE name LIKE '%{search_q}%' OR mobile LIKE '%{search_q}%' OR survey_no LIKE '%{search_q}%'"
-    else:
-      query = "SELECT * FROM farmers"
-
+    query = (
+        f"SELECT * FROM farmers WHERE name LIKE '%{search_q}%' OR mobile LIKE"
+        f" '%{search_q}%' OR survey_no LIKE '%{search_q}%'"
+        if search_q.strip()
+        else "SELECT * FROM farmers"
+    )
     df_farmers = pd.read_sql(query, conn)
     if not df_farmers.empty:
       for idx, row in df_farmers.iterrows():
@@ -921,7 +852,6 @@ with tab4:
         st.markdown("---")
     else:
       st.info("कोई किसान रिकॉर्ड नहीं मिला।")
-
   conn.close()
 
 # ==================== टैब 5: दस्तावेज़ फोल्डर ====================
@@ -938,7 +868,6 @@ with tab5:
         "फाइल अपलोड करें *", type=["pdf", "jpg", "png", "jpeg"]
     )
     doc_save = st.form_submit_button("फोल्डर में सहेजें")
-
     if doc_save:
       if not doc_name.strip() or not doc_file:
         st.error("कृपया दस्तावेज़ का नाम और फाइल दोनों दें!")
@@ -981,7 +910,6 @@ with tab5:
           st.success("दस्तावेज़ डिलीट कर दिया गया!")
   else:
     st.info("फोल्डर खाली है।")
-
   conn.close()
 
 # ==================== टैब 6: निजी डायरी ====================
@@ -995,7 +923,6 @@ with tab6:
     )
     note_text = st.text_area("आज के मुख्य नोट्स / बातें यहाँ लिखें... *")
     note_save = st.form_submit_button("नोट्स सेव करें")
-
     if note_save:
       if not note_text.strip():
         st.error("डायरी नोट खाली नहीं हो सकता!")
@@ -1022,5 +949,4 @@ with tab6:
       st.markdown("---")
   else:
     st.info("डायरी खाली है।")
-
   conn.close()

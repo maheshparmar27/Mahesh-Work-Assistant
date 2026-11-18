@@ -1,5 +1,6 @@
 import datetime
 import os
+import re
 import sqlite3
 import pandas as pd
 import pypdf
@@ -375,7 +376,8 @@ with tab1:
           if row["file_name"]:
             st.download_button(
                 label=f"📥 डाउनलोड पावती ({row['file_name']})",
-                data=row["file_name"],
+                data=row["file_data"],
+                file_name=row["file_name"],
                 mime="application/octet-stream",
                 key=f"sub_dl_{row['id']}",
             )
@@ -810,12 +812,12 @@ with tab3:
 
   else:
     st.markdown(
-        "### 📂 असली PDF ऑटो-स्कैन (Mahesh Parmar / माहेश परमार की शिकायतें"
-        " ढूँढना)"
+        "### 📂 PDF से ऑटो-इंपोर्ट (केवल अंग्रेजी 'MAHRESH PARMAR' अंतिम कॉलम"
+        " जाँच)"
     )
     st.info(
-        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप फाइल को पढ़कर आपके नाम"
-        " वाली सभी शिकायतें अपने आप ढूंढ कर लाएगा।"
+        "यहाँ अपनी सीएम हेल्पलाइन PDF अपलोड करें। ऐप केवल उस लाइन को पकड़ेगा"
+        " जिसके आखिर में अंग्रेजी में **'MAHESH PARMAR'** लिखा होगा।"
     )
 
     uploaded_pdf = st.file_uploader(
@@ -823,140 +825,120 @@ with tab3:
     )
 
     if uploaded_pdf is not None:
-      with st.spinner("पीडीएफ स्कैन हो रही है, कृपया प्रतीक्षा करें..."):
+      with st.spinner("पीडीएफ स्कैन हो रही है..."):
         try:
           reader = pypdf.PdfReader(uploaded_pdf)
           scanned_complaints = []
 
-          # हर एक पेज को स्कैन करके 'MAHESH PARMAR' या 'महेश' ढूँढना
           for page_num in range(len(reader.pages)):
             page_text = reader.pages[page_num].extract_text()
             if page_text:
               lines = page_text.split("\n")
               for line in lines:
-                if (
-                    "MAHESH PARMAR" in line.upper()
-                    or "महेश" in line
-                    or "पारमार" in line
+                clean_line = line.strip()
+                # सख्त नियम: केवल अंग्रेजी में सटीक 'MAHESH PARMAR' लाइन के अंत में होना चाहिए
+                if clean_line.endswith("MAHESH PARMAR") or clean_line.endswith(
+                    "Mahesh Parmar"
                 ):
-                  # जब नाम मिल जाए, तो उस पेज के टेक्स्ट से जानकारी निकालने का प्रयास करें
-                  # चूँकि आपकी पीडीएफ में नाम के आस-पास ही शिकायत नंबर और विवरण रहता है,
-                  # हम यहाँ एक सुरक्षित जेनरिक स्ट्रक्चर बना रहे हैं ताकि कोई भी अपलोड की गई फाइल काम करे।
+                  # इस ब्लॉक/रो से 8 अंकों का शिकायत नंबर (ID) निकालें
+                  ids = re.findall(r"\b\d{8}\b", page_text)
+                  comp_id = (
+                      ids[0]
+                      if ids
+                      else f"COMP_{page_num}_{int(datetime.datetime.now().timestamp()) % 1000}"
+                  )
+
+                  # तारीख निकालें
+                  dates = re.findall(
+                      r"\b\d{2}[-/]\d{2}[-/]\d{4}\b|\b\d{4}[-/]\d{2}[-/]\d{2}\b",
+                      page_text,
+                  )
+                  comp_date = (
+                      dates[0] if dates else str(datetime.date.today())
+                  )
+
+                  # मोबाइल नंबर निकालें
+                  mobiles = re.findall(r"\b[6-9]\d{9}\b", page_text)
+                  mobile = mobiles[0] if mobiles else "उपलब्ध नहीं"
+
                   scanned_complaints.append({
-                      "comp_id": f"CM_{page_num}_{int(datetime.datetime.now().timestamp()) % 10000}",
+                      "comp_id": comp_id,
                       "level": "L1",
-                      "complainant": "पीडीएफ से प्राप्त प्रेषक",
-                      "mobile": "उपलब्ध नहीं",
+                      "complainant": "अंतिम कॉलम प्रेषक",
+                      "mobile": mobile,
                       "subject": (
-                          f"पेज {page_num + 1} पर आपके नाम ('Mahesh Parmar')"
-                          " से संबंधित सीएम हेल्पलाइन शिकायत दर्ज है।"
+                          f"अंतिम कॉलम में 'MAHESH PARMAR' मिलने पर स्वतः"
+                          f" स्कैन (पेज {page_num + 1})"
                       ),
                       "status": "पेंडिंग (Pending)",
-                      "date": str(datetime.date.today()),
-                      "reply": page_text[
-                          :300
-                      ],  # पीडीएफ का शुरुआती टेक्स्ट जवाब/सार के रूप में
+                      "date": comp_date,
+                      "reply": clean_line,
                   })
 
-          # यदि डायनेमिक रूप से नाम न मिले तो आपकी भेजी गई नवंबर की फिक्स शिकायतों को बैकअप के रूप में दिखाना ताकि खाली न रहे
-          if not scanned_complaints:
-            # आपकी नवंबर वाली फाइल की असली दोनों शिकायतें
-            scanned_complaints = [
-                {
-                    "comp_id": "41475928",
-                    "level": "L1",
-                    "complainant": "अंकित जी",
-                    "mobile": "7723014630",
-                    "subject": (
-                        "ग्राम-सिंगारपुर, ग्राम पंचायत-रानीबडौद, उपतहसील-पोलेयकला,"
-                        " जिला शाजापुर - सीमांकन उपरांत जमीन न दिलाए जाने बाबत"
-                    ),
-                    "status": "पेंडिंग (Pending)",
-                    "date": "2026-11-06",
-                    "reply": (
-                        "शिकायत कि जांच तहसीलदार पोलायकलां से करवाई गई"
-                        " शिकायतकर्ता को भूमि का बटांकन संबंधित समस्या थी जिसका"
-                        " निराकरण कर दिया गया है शिकायतकर्ता संतुष्ट है"
-                    ),
-                },
-                {
-                    "comp_id": "41475939",
-                    "level": "L1",
-                    "complainant": "रामबाबू पाटीदार",
-                    "mobile": "9981864757",
-                    "subject": (
-                        "ग्राम-मकोड़ी, ग्राम पंचायत-मकोड़ी, तहसील-पोलायकलां, जिला-"
-                        "शाजापुर - प्रमिकरण/सीमांकन बाबत"
-                    ),
-                    "status": "पेंडिंग (Pending)",
-                    "date": "2026-11-06",
-                    "reply": (
-                        "शिकायतकर्ता द्वारा की गई शिकायत के संबंध में जांच"
-                        " कार्यवाही प्रचलित है।"
-                    ),
-                },
-            ]
-
-          st.success(
-              f"🎉 पीडीएफ सफलतापूर्वक स्कैन हो गई है! आपके नाम से कुल"
-              f" **{len(scanned_complaints)}** शिकायतें मिली हैं:"
-          )
-
-          with st.form("scanned_preview_form"):
-            selected_items = []
-            for i, comp in enumerate(scanned_complaints):
-              st.markdown(
-                  f"**शिकायत ID: {comp['comp_id']}** | प्रेषक:"
-                  f" {comp['complainant']}"
-              )
-              st.write(f"📝 **विषय:** {comp['subject']}")
-              st.write(f"📅 **मूल दिनांक:** {comp['date']}")
-              st.write(f"💬 **जवाब:** {comp['reply']}")
-
-              is_selected = st.checkbox(
-                  f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp['comp_id']})",
-                  value=True,
-                  key=f"scan_chk_{i}",
-              )
-              if is_selected:
-                selected_items.append(comp)
-              st.markdown("---")
-
-            save_btn = st.form_submit_button(
-                "🚀 चुनी गई शिकायतें सूची में जोड़ें"
+          if scanned_complaints:
+            st.success(
+                f"🎉 स्कैन पूरा हुआ! अंतिम कॉलम में अंग्रेजी 'MAHESH PARMAR'"
+                f" से कुल **{len(scanned_complaints)}** शिकायतें मिली हैं:"
             )
-            if save_btn:
-              added_count = 0
-              cur = conn.cursor()
-              for comp in selected_items:
-                try:
-                  cur.execute(
-                      """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Scanned from PDF')""",
-                      (
-                          comp["comp_id"],
-                          comp["level"],
-                          comp["complainant"],
-                          comp["mobile"],
-                          comp["subject"],
-                          comp["status"],
-                          comp["date"],
-                          comp["reply"],
-                      ),
-                  )
-                  if cur.rowcount > 0:
-                    added_count += 1
-                except:
-                  pass
-              conn.commit()
 
-              del uploaded_pdf
-              st.success(
-                  f"सफलतापूर्वक **{added_count}** नई शिकायतें जोड़ दी गई हैं!"
-                  " पीडीएफ फाइल और उसकी मेमोरी पूरी तरह साफ़ कर दी गई है।"
+            with st.form("scanned_preview_form"):
+              selected_items = []
+              for i, comp in enumerate(scanned_complaints):
+                st.markdown(
+                    f"**शिकायत ID: {comp['comp_id']}** | प्रेषक:"
+                    f" {comp['complainant']}"
+                )
+                st.write(f"📝 **विषय:** {comp['subject']}")
+                st.write(f"📅 **दिनांक:** {comp['date']}")
+                st.write(f"💬 **अतिम कॉलम डेटा:** {comp['reply']}")
+
+                is_selected = st.checkbox(
+                    f"इस शिकायत को डेटाबेस में जोड़ें (ID: {comp['comp_id']})",
+                    value=True,
+                    key=f"scan_chk_{i}",
+                )
+                if is_selected:
+                  selected_items.append(comp)
+                st.markdown("---")
+
+              save_btn = st.form_submit_button(
+                  "🚀 चुनी गई शिकायतें सूची में जोड़ें"
               )
-              st.rerun()
+              if save_btn:
+                added_count = 0
+                cur = conn.cursor()
+                for comp in selected_items:
+                  try:
+                    cur.execute(
+                        """INSERT OR IGNORE INTO cm_helpline (comp_id, level, complainant, mobile, subject, status, date, reply, remarks)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Scanned strictly by English Last Column')""",
+                        (
+                            comp["comp_id"],
+                            comp["level"],
+                            comp["complainant"],
+                            comp["mobile"],
+                            comp["subject"],
+                            comp["status"],
+                            comp["date"],
+                            comp["reply"],
+                        ),
+                    )
+                    if cur.rowcount > 0:
+                      added_count += 1
+                  except:
+                    pass
+                conn.commit()
 
+                del uploaded_pdf
+                st.success(
+                    f"सफलतापूर्वक **{added_count}** नई शिकायतें जोड़ दी गई हैं!"
+                )
+                st.rerun()
+          else:
+            st.warning(
+                "इस पीडीएफ के अंतिम कॉलम में अंग्रेजी में 'MAHESH PARMAR'"
+                " लिखा हुआ कोई रिकॉर्ड नहीं मिला।"
+            )
         except Exception as e:
           st.error(f"पीडीएफ पढ़ने में त्रुटि आई: {e}")
 
@@ -1130,5 +1112,5 @@ with tab6:
         st.rerun()
       st.markdown("---")
   else:
-    st.info("डायरी डायरी खाली है।")
+    st.info("डायरी खाली है।")
   conn.close()
